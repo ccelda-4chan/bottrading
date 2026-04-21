@@ -118,9 +118,11 @@ async def get_dashboard():
             <div class="flex justify-between items-end">
                 <div class="flex items-center space-x-2">
                     <h1 class="text-xl font-black italic tracking-tighter text-white">SHADOW <span class="text-[10px] align-top text-gray-500 font-normal not-italic">V2</span></h1>
+                    <div id="mode-badge" class="ml-4 px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-widest border border-blue-500/50 text-blue-400 bg-blue-500/10">LIVE MODE</div>
                     <div class="text-2xl font-bold text-green-bitget ml-8"><span class="text-xs font-normal text-gray-500 align-middle mr-2 uppercase">Today's P&L</span><span id="stat-today-pnl">+$0.00</span></div>
                 </div>
                 <div class="flex space-x-12 pb-1 text-gray-200">
+                    <div class="text-center"><div class="text-[9px] text-gray-500 uppercase">Next Sync</div><div id="stat-sync" class="text-xs font-mono text-gold">00s</div></div>
                     <div class="text-center"><div class="text-[9px] text-gray-500 uppercase">Uptime Check</div><div id="stat-uptime" class="text-xs font-mono text-blue-400">Restoring...</div></div>
                     <div class="text-center"><div class="text-[9px] text-gray-500 uppercase">Balance</div><div id="stat-balance" class="text-sm font-bold font-mono">$0.00</div></div>
                     <div class="text-center"><div class="text-[9px] text-gray-500 uppercase">Unrealized</div><div id="stat-unrealized" class="text-sm font-bold font-mono text-green-bitget">+$0.00</div></div>
@@ -145,7 +147,12 @@ async def get_dashboard():
                         <div class="bg-accent px-2 py-1 rounded border border-gray-700 text-xs font-bold">BTC/USDT <span class="text-[9px] font-normal text-gray-500 ml-1">Perpetual</span></div>
                         <div class="text-lg font-bold text-white">$74,677 <span class="text-[10px] text-green-bitget font-normal">+0.73%</span></div>
                     </div>
-                    <div class="flex bg-accent rounded p-0.5 border border-gray-800"><button class="px-3 py-1 text-[10px] bg-blue-600 rounded shadow text-white">Price</button><button class="px-3 py-1 text-[10px] text-gray-500">Equity</button></div>
+                    <div class="flex space-x-2">
+                        <select id="tf-select" class="bg-accent text-[10px] text-gray-400 border border-gray-800 rounded px-2 py-1 outline-none" onchange="updateChartTf(this.value)">
+                            <option value="1m">1m</option><option value="5m">5m</option><option value="15m">15m</option><option value="1h" selected>1h</option><option value="4h">4h</option><option value="1d">1d</option>
+                        </select>
+                        <div class="flex bg-accent rounded p-0.5 border border-gray-800"><button class="px-3 py-1 text-[10px] bg-blue-600 rounded shadow text-white">Price</button><button class="px-3 py-1 text-[10px] text-gray-500">Equity</button></div>
+                    </div>
                 </div>
 
                 <div class="bg-card rounded border border-gray-800 overflow-hidden" style="height: 450px;">
@@ -185,6 +192,7 @@ async def get_dashboard():
                         <div class="flex justify-between text-[10px]"><span class="text-gray-400">Product</span><span id="side-product" class="text-gray-300">---</span></div>
                     </div>
                     <div class="space-y-3 mt-6"><div class="text-[9px] font-bold text-gray-500 uppercase tracking-widest border-b border-gray-800 pb-1">System</div>
+                        <div class="flex justify-between text-[10px]"><span class="text-gray-400">Timeframe</span><span id="side-tf" class="text-blue-400 font-bold uppercase">1H</span></div>
                         <div class="flex justify-between text-[10px]"><span class="text-gray-400">WebSocket</span><span class="text-green-bitget font-bold uppercase">Ok</span></div>
                         <div class="flex justify-between text-[10px]"><span class="text-gray-400">Binance</span><span class="text-green-bitget font-bold uppercase">Ok</span></div>
                         <div class="flex justify-between text-[10px]"><span class="text-gray-400">CoinGecko</span><span class="text-gray-600 font-bold uppercase">--</span></div>
@@ -207,6 +215,28 @@ async def get_dashboard():
             let lastEventTime = Date.now() / 1000;
             const liveFeedTypes = ['RISK', 'MARKET', 'SCAN', 'SIGNAL', 'SYNC'];
             const liveFeedSymbols = ['BTC', 'ETH', 'XRP', 'ADA', 'SUI', 'ARB', 'APT'];
+            
+            let tvWidget = null;
+            function updateChartTf(tf) {
+                const tvTfMap = { '1m': '1', '5m': '5', '15m': '15', '1h': '60', '4h': '240', '1d': 'D' };
+                const mappedTf = tvTfMap[tf] || '60';
+                
+                // Re-init widget (TV widget doesn't easily allow changing timeframe via JS API without the full library)
+                new TradingView.widget({
+                    "autosize": true, "symbol": "BITGET:BTCUSDT.P", "interval": mappedTf, 
+                    "timezone": "Etc/UTC", "theme": "dark", "style": "1", "locale": "en", 
+                    "toolbar_bg": "#f1f3f6", "enable_publishing": false, "hide_top_toolbar": true, 
+                    "save_image": false, "container_id": "tradingview_widget"
+                });
+                
+                // Notify bot
+                fetch('/set-timeframe', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+                    body: `timeframe=${tf}`
+                });
+            }
+
             function addLiveFeedItem() {
                 const feed = document.getElementById('live-feed'); if (!feed) return;
                 const type = liveFeedTypes[Math.floor(Math.random() * liveFeedTypes.length)];
@@ -237,6 +267,17 @@ async def get_dashboard():
 
                     document.getElementById('stat-today-pnl').innerText = (status.today_pnl >= 0 ? '+' : '') + '$' + parseFloat(status.today_pnl).toFixed(2);
                     document.getElementById('stat-uptime').innerText = status.last_tick.split(' ')[1] || 'WAIT';
+                    document.getElementById('stat-sync').innerText = status.next_tick_in + 's';
+                    
+                    const modeBadge = document.getElementById('mode-badge');
+                    if (status.simulation_mode) {
+                        modeBadge.innerText = 'SIMULATION';
+                        modeBadge.className = 'ml-4 px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-widest border border-gold/50 text-gold bg-gold/10';
+                    } else {
+                        modeBadge.innerText = 'LIVE MODE';
+                        modeBadge.className = 'ml-4 px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-widest border border-blue-500/50 text-blue-400 bg-blue-500/10';
+                    }
+
                     document.getElementById('stat-balance').innerText = '$' + parseFloat(status.balance).toLocaleString(undefined, {minimumFractionDigits: 2});
                     document.getElementById('stat-unrealized').innerText = (status.unrealized_pnl >= 0 ? '+' : '') + '$' + parseFloat(status.unrealized_pnl).toFixed(2);
                     document.getElementById('stat-unrealized').className = 'text-sm font-bold font-mono ' + (status.unrealized_pnl >= 0 ? 'text-green-bitget' : 'text-red-bitget');
@@ -246,6 +287,7 @@ async def get_dashboard():
                     document.getElementById('stat-open').innerText = status.open_count;
                     document.getElementById('side-balance').innerText = '$' + parseFloat(status.balance).toLocaleString(undefined, {minimumFractionDigits: 2});
                     document.getElementById('side-session-pnl').innerText = (status.session_pnl >= 0 ? '+' : '') + '$' + parseFloat(status.session_pnl).toFixed(2);
+                    document.getElementById('side-tf').innerText = status.chart_timeframe || '1H';
                     document.getElementById('side-product').innerText = status.product_type;
                     document.getElementById('side-connection').innerText = status.is_active ? 'Connected' : 'Disconnected';
                     document.getElementById('side-connection').className = 'font-bold ' + (status.is_active ? 'text-green-bitget' : 'text-red-bitget');
@@ -358,6 +400,13 @@ async def reject_signal(symbol: str = Form(...), signal_type: str = Form(...)):
         bot_instance.status["trade_signals"] = [s for s in bot_instance.status["trade_signals"] if not (s["symbol"] == symbol and s["type"] == signal_type)]
         bot_instance.add_log(f"Signal Rejected: {signal_type} for {symbol}")
     return RedirectResponse(url="/", status_code=303)
+
+@app.post("/set-timeframe")
+async def set_timeframe(timeframe: str = Form(...)):
+    if bot_instance:
+        bot_instance.status["chart_timeframe"] = timeframe
+        bot_instance.add_log(f"Chart timeframe set to {timeframe}")
+    return {"status": "ok"}
 
 @app.get("/health")
 async def health_check():
