@@ -25,7 +25,8 @@ def load_config():
         "SYMBOLS": os.getenv("BITGET_SYMBOLS", "BTCUSDT,ETHUSDT,XRPUSDT").split(","),
         "PRODUCT_TYPE": os.getenv("BITGET_PRODUCT_TYPE", "usdt-futures"),
         "INTERVAL": int(os.getenv("BITGET_INTERVAL", "10")),
-        "PORT": int(os.getenv("PORT", "8000"))
+        "PORT": int(os.getenv("PORT", "8000")),
+        "NEWS_API_KEY": os.getenv("NEWS_API_KEY", "")
     }
     return config
 
@@ -46,7 +47,8 @@ async def lifespan(app: FastAPI):
             api_secret=cfg["API_SECRET"],
             passphrase=cfg["API_PASSPHRASE"],
             symbols=cfg["SYMBOLS"],
-            product_type=cfg["PRODUCT_TYPE"]
+            product_type=cfg["PRODUCT_TYPE"],
+            news_api_key=cfg["NEWS_API_KEY"]
         )
         
         bot_thread = threading.Thread(target=bot_instance.run, kwargs={"interval": cfg["INTERVAL"]}, daemon=True)
@@ -119,6 +121,7 @@ async def get_dashboard():
                     <div class="text-2xl font-bold text-green-bitget ml-8"><span class="text-xs font-normal text-gray-500 align-middle mr-2 uppercase">Today's P&L</span><span id="stat-today-pnl">+$0.00</span></div>
                 </div>
                 <div class="flex space-x-12 pb-1 text-gray-200">
+                    <div class="text-center"><div class="text-[9px] text-gray-500 uppercase">Uptime Check</div><div id="stat-uptime" class="text-xs font-mono text-blue-400">Restoring...</div></div>
                     <div class="text-center"><div class="text-[9px] text-gray-500 uppercase">Balance</div><div id="stat-balance" class="text-sm font-bold font-mono">$0.00</div></div>
                     <div class="text-center"><div class="text-[9px] text-gray-500 uppercase">Unrealized</div><div id="stat-unrealized" class="text-sm font-bold font-mono text-green-bitget">+$0.00</div></div>
                     <div class="text-center"><div class="text-[9px] text-gray-500 uppercase">Trades</div><div id="stat-trades" class="text-sm font-bold font-mono">0</div></div>
@@ -186,6 +189,10 @@ async def get_dashboard():
                         <div class="flex justify-between text-[10px]"><span class="text-gray-400">Binance</span><span class="text-green-bitget font-bold uppercase">Ok</span></div>
                         <div class="flex justify-between text-[10px]"><span class="text-gray-400">CoinGecko</span><span class="text-gray-600 font-bold uppercase">--</span></div>
                     </div>
+                    <div class="mt-8">
+                        <div class="text-[9px] font-bold text-gray-500 uppercase tracking-widest border-b border-gray-800 pb-1 mb-2">Platform Note</div>
+                        <p class="text-[9px] text-gray-400 italic leading-tight">Render Free Tier sleeps after 15m. Use an external pinger to keep active.</p>
+                    </div>
                     <div class="mt-8"><div class="text-[9px] font-bold text-gray-500 uppercase tracking-widest border-b border-gray-800 pb-1 mb-3">Asset Signals</div><div id="asset-signals-container" class="space-y-2"></div></div>
                 </div>
                 <div class="mt-auto p-4 bg-dark/50 border-t border-gray-800">
@@ -209,13 +216,27 @@ async def get_dashboard():
                 item.innerHTML = `<div class="flex space-x-2"><span class="${typeColor} font-bold">${type}</span><span class="text-gray-400">${symbol} DD tracking enabled</span></div><span class="text-gray-600">+${(Math.random()*0.5).toFixed(2)}%</span>`;
                 feed.prepend(item); if (feed.children.length > 30) feed.removeChild(feed.lastChild);
             }
-            setInterval(addLiveFeedItem, 3000);
+            // setInterval(addLiveFeedItem, 3000);
 
             async function updateDashboard() {
                 try {
                     const res = await fetch('/api/status'); const status = await res.json();
                     const symbolMap = status.symbol_map || {};
+                    
+                    // Update News in Sidebar
+                    const feed = document.getElementById('live-feed');
+                    if (status.news && status.news.length > 0 && feed) {
+                        feed.innerHTML = status.news.map(n => `
+                            <div class="mb-2 pb-2 border-b border-gray-800 opacity-90">
+                                <div class="text-blue-500 font-bold uppercase mb-1">NEWS | ${n.source.name}</div>
+                                <div class="text-gray-200">${n.title}</div>
+                                <div class="text-gray-500 mt-1">${new Date(n.publishedAt).toLocaleTimeString()}</div>
+                            </div>
+                        `).join('');
+                    }
+
                     document.getElementById('stat-today-pnl').innerText = (status.today_pnl >= 0 ? '+' : '') + '$' + parseFloat(status.today_pnl).toFixed(2);
+                    document.getElementById('stat-uptime').innerText = status.last_tick.split(' ')[1] || 'WAIT';
                     document.getElementById('stat-balance').innerText = '$' + parseFloat(status.balance).toLocaleString(undefined, {minimumFractionDigits: 2});
                     document.getElementById('stat-unrealized').innerText = (status.unrealized_pnl >= 0 ? '+' : '') + '$' + parseFloat(status.unrealized_pnl).toFixed(2);
                     document.getElementById('stat-unrealized').className = 'text-sm font-bold font-mono ' + (status.unrealized_pnl >= 0 ? 'text-green-bitget' : 'text-red-bitget');

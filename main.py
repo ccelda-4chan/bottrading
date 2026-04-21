@@ -16,7 +16,8 @@ def load_config():
         "SYMBOLS": os.getenv("BITGET_SYMBOLS", "BTCUSDT,ETHUSDT,XRPUSDT").split(","),
         "PRODUCT_TYPE": os.getenv("BITGET_PRODUCT_TYPE", "usdt-futures"),
         "INTERVAL": int(os.getenv("BITGET_INTERVAL", "10")),
-        "PORT": int(os.getenv("PORT", "8000"))
+        "PORT": int(os.getenv("PORT", "8000")),
+        "NEWS_API_KEY": os.getenv("NEWS_API_KEY", "")
     }
     return config
 
@@ -35,7 +36,8 @@ if __name__ == "__main__":
         api_secret=cfg["API_SECRET"],
         passphrase=cfg["API_PASSPHRASE"],
         symbols=cfg["SYMBOLS"],
-        product_type=cfg["PRODUCT_TYPE"]
+        product_type=cfg["PRODUCT_TYPE"],
+        news_api_key=cfg["NEWS_API_KEY"]
     )
     
     # Register bot instance with web app

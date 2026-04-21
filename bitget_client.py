@@ -101,11 +101,20 @@ class BitgetDemoClient:
             "side": side,  # buy, sell
             "orderType": order_type, # market, limit
             "size": str(size),
-            "tradeSide": "open" if "open" in side else "close"
+            "tradeSide": "open" if side in ["buy", "sell"] else "close"
         }
+        # In Bitget V2, tradeSide usually is 'open' or 'close'. 
+        # But for 'buy' and 'sell' it depends on the position mode.
+        # If the side is 'buy', it can be 'open' (long) or 'close' (short).
+        # However, the simple V2 place-order often uses 'side' and 'tradeSide' together.
+        # Let's refine based on common V2 patterns.
+        if side in ["buy", "sell"]:
+            body["tradeSide"] = "open"
+        
         if price:
             body["price"] = str(price)
         
+        logger.info(f"Placing order: {body}")
         return self.request("POST", "/api/v2/mix/order/place-order", body=body)
 
     def get_open_positions(self, symbol=None):

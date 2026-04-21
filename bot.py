@@ -1,16 +1,22 @@
+import json
+import os
 import time
 from loguru import logger
 from bitget_client import BitgetDemoClient
 from strategy import Strategy
+from news_client import NewsClient
 
 class TradingBot:
-    def __init__(self, api_key, api_secret, passphrase, symbols, product_type="usdt-futures"):
+    def __init__(self, api_key, api_secret, passphrase, symbols, product_type="usdt-futures", news_api_key=None):
         self.client = BitgetDemoClient(api_key, api_secret, passphrase, product_type=product_type)
         self.strategy = Strategy()
+        self.news_client = NewsClient(news_api_key) if news_api_key else None
         self.symbols = symbols
         self.product_type = product_type
         self.is_running = False
         self.auto_trade = False
+        self.news_sentiment = 0
+        self.persistence_file = "bot_state.json"
         self.status = {
             "balance": 0.0,
             "today_pnl": 0.0,
@@ -29,9 +35,39 @@ class TradingBot:
             "logs": [],
             "events": [], # To store sound events
             "asset_signals": {s: 50 for s in symbols}, # Mock score for bar chart
-            "trade_signals": [] # List of pending/recent signals for approval
+            "trade_signals": [], # List of pending/recent signals for approval
+            "news": [] # Latest news
         }
         self.initial_balance = None
+        self.load_state()
+
+    def save_state(self):
+        try:
+            state = {
+                "initial_balance": self.initial_balance,
+                "auto_trade": self.auto_trade,
+                "logs": self.status["logs"],
+                "trades_count": self.status["trades_count"]
+            }
+            with open(self.persistence_file, "w") as f:
+                json.dump(state, f)
+            # logger.debug("Bot state saved")
+        except Exception as e:
+            logger.warning(f"Failed to save state: {e}")
+
+    def load_state(self):
+        if os.path.exists(self.persistence_file):
+            try:
+                with open(self.persistence_file, "r") as f:
+                    state = json.load(f)
+                    self.initial_balance = state.get("initial_balance")
+                    self.auto_trade = state.get("auto_trade", False)
+                    self.status["logs"] = state.get("logs", [])
+                    self.status["trades_count"] = state.get("trades_count", 0)
+                    self.status["auto_trade"] = self.auto_trade
+                logger.info("Bot state restored from local storage")
+            except Exception as e:
+                logger.warning(f"Failed to load state: {e}")
 
     def add_event(self, event_type):
         # event_type can be 'place_order', 'tp', 'sl'
@@ -49,7 +85,7 @@ class TradingBot:
         logger.info(f"Starting Trading Bot for symbols: {self.symbols}")
         self.is_running = True
         self.status["is_active"] = True
-        self.add_log("Bot Engine Started")
+        self.add_log("Bot Engine Active (Render Optimization Enabled)")
         
         while self.is_running:
             try:
@@ -60,12 +96,32 @@ class TradingBot:
                 self.add_log(f"Tick Error: {str(e)}")
             
             # Use small sleeps to allow quicker shutdown
-            for _ in range(int(interval)):
+            # Also ensures that if interval is very short, we don't spam
+            for _ in range(max(1, int(interval))):
                 if not self.is_running:
                     break
                 time.sleep(1)
 
     def tick(self):
+        # 0. Save State periodically
+        self.save_state()
+
+        # 0. Update News
+        if self.news_client:
+            news = self.news_client.get_crypto_news()
+            if news:
+                self.status["news"] = news
+                # Calculate aggregate sentiment
+                total_sentiment = 0
+                for article in news:
+                    total_sentiment += self.news_client.get_sentiment(article.get('title', '') + " " + article.get('description', ''))
+                self.news_sentiment = total_sentiment
+                logger.info(f"News Sentiment: {self.news_sentiment}")
+                if self.news_sentiment > 2:
+                    self.add_log(f"Bullish News Detected ({self.news_sentiment})")
+                elif self.news_sentiment < -2:
+                    self.add_log(f"Bearish News Detected ({self.news_sentiment})")
+
         # 1. Get account balance
         usdt_balance = self.status.get("balance", 0.0)
         
@@ -149,7 +205,7 @@ class TradingBot:
             return
 
         # Generate signal
-        signal = self.strategy.generate_signal(indicators)
+        signal = self.strategy.generate_signal(indicators, news_sentiment=self.news_sentiment)
         self.status["signals"][symbol] = signal
         logger.info(f"Signal for {symbol}: {signal}")
         

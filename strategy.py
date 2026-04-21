@@ -61,17 +61,24 @@ class Strategy:
             atr[i] = (atr[i-1] * (window - 1) + tr[i]) / window
         return atr
 
-    def generate_signal(self, indicators):
+    def generate_signal(self, indicators, news_sentiment=0):
         if not indicators:
             return None
 
         # Crossover logic
+        signal = "HOLD"
         if indicators["ema_short"] > indicators["ema_long"] and indicators["prev_ema_short"] <= indicators["prev_ema_long"]:
-            return "LONG"
+            signal = "LONG"
         elif indicators["ema_short"] < indicators["ema_long"] and indicators["prev_ema_short"] >= indicators["prev_ema_long"]:
-            return "SHORT"
+            signal = "SHORT"
         
-        return "HOLD"
+        # News override/boost
+        if news_sentiment > 2 and signal == "HOLD":
+            return "LONG" # News-driven scalp
+        if news_sentiment < -2 and signal == "HOLD":
+            return "SHORT" # News-driven dump
+            
+        return signal
 
     def calculate_position_size(self, balance, entry_price, atr, stop_loss_mult=2.0):
         """
