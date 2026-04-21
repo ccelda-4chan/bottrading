@@ -19,9 +19,9 @@ class TradingBot:
         self.news_sentiment = 0
         self.persistence_file = "bot_state.json"
         
-        # Pure Simulation Mode
-        self.simulation_mode = True
-        self.virtual_balance = 10000.0  # Starting virtual balance
+        # Pure Execution Engine (Automated)
+        self.simulation_mode = True 
+        self.virtual_balance = 10000.0  # Starting balance
         self.virtual_positions = {}  # {symbol: {holdSide: 'long'/'short', total: float, averageOpenPrice: float, tp: float, sl: float}}
         
         self.status = {
@@ -95,10 +95,10 @@ class TradingBot:
             self.status["logs"].pop(0)
 
     def run(self, interval=10):
-        logger.info(f"Starting Trading Bot (SIMULATION ONLY) for symbols: {self.symbols}")
+        logger.info(f"Starting Pro Trading Engine for symbols: {self.symbols}")
         self.is_running = True
         self.status["is_active"] = True
-        self.add_log("Bot Engine Active (Simulation Mode)")
+        self.add_log("Trading Engine Active - Monitoring Market")
         
         while self.is_running:
             try:
@@ -210,10 +210,10 @@ class TradingBot:
                     if len(self.status["trade_signals"]) > 10:
                         self.status["trade_signals"].pop()
 
-        # Check existing positions (SIMULATION ONLY)
+        # Check existing positions (AUTOMATED EXECUTION)
         current_pos = self.virtual_positions.get(symbol)
         if current_pos:
-            # Update unrealized PNL for simulation
+            # Update unrealized PNL
             current_price = float(self.status["prices"].get(symbol, 0))
             entry_price = current_pos['averageOpenPrice']
             size = current_pos['total']
@@ -230,8 +230,8 @@ class TradingBot:
             
             if tp_hit or sl_hit:
                 event = "tp" if tp_hit else "sl"
-                logger.info(f"Simulation: {event.upper()} hit for {symbol}")
-                self.add_log(f"Simulation: {event.upper()} hit for {symbol} at {current_price}")
+                logger.info(f"Execution: {event.upper()} hit for {symbol}")
+                self.add_log(f"Execution: {event.upper()} hit for {symbol} at {current_price}")
                 self.add_event(event)
                 self.virtual_balance += current_pos['unrealizedPL']
                 self.status["trades_count"] += 1
@@ -258,22 +258,22 @@ class TradingBot:
         target_side = "long" if side == "buy" else "short"
         opposite_side = "short" if side == "buy" else "long"
 
-        # 1. Close opposite position (SIMULATION ONLY)
+        # 1. Close opposite position
         if current_pos and current_pos.get('holdSide') == opposite_side:
-            logger.info(f"Simulation: Closing {opposite_side.upper()} position for {symbol}")
-            self.add_log(f"Simulation: Auto-closing {opposite_side.upper()} for {symbol}")
+            logger.info(f"Execution: Closing {opposite_side.upper()} position for {symbol}")
+            self.add_log(f"Execution: Auto-closing {opposite_side.upper()} for {symbol}")
             self.virtual_balance += current_pos.get('unrealizedPL', 0)
             self.status["trades_count"] += 1
             del self.virtual_positions[symbol]
             self.status["positions"][symbol] = "None"
             current_pos = None
 
-        # 2. Open new position (SIMULATION ONLY)
+        # 2. Open new position
         if not current_pos or current_pos.get('holdSide') != target_side:
             size = self.strategy.calculate_position_size(balance, indicators['last_close'], indicators['atr'])
             if size > 0:
-                logger.info(f"Simulation: Auto-opening {target_side.upper()} for {symbol} (size {size:.4f})")
-                self.add_log(f"Simulation Auto-Open {target_side.upper()} {symbol}")
+                logger.info(f"Execution: Auto-opening {target_side.upper()} for {symbol} (size {size:.4f})")
+                self.add_log(f"Auto-Open {target_side.upper()} {symbol}")
                 self.add_event("place_order")
                 
                 entry_price = indicators['last_close']

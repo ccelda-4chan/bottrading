@@ -19,9 +19,17 @@ def load_config():
     return config
 
 if __name__ == "__main__":
-    logger.info("Initializing Simulation Trading Bot with Web UI...")
+    logger.info("Initializing Pro Trading Platform with Web UI...")
     
     cfg = load_config()
+    
+    # Expanded list of symbols for Alts/Shitcoins/New Coins
+    default_symbols = ["BTCUSDT", "ETHUSDT", "SOLUSDT", "DOGEUSDT", "PEPEUSDT", "SHIBUSDT", "LINKUSDT", "AVAXUSDT", "DOTUSDT", "MATICUSDT", "UNIUSDT", "LTCUSDT", "BCHUSDT", "ARBUSDT", "OPUSDT", "SUIUSDT", "SEIUSDT"]
+    symbols = os.getenv("BITGET_SYMBOLS")
+    if symbols:
+        symbols = symbols.split(",")
+    else:
+        symbols = default_symbols
     
     try:
         logger.add("bot.log", rotation="10 MB")
@@ -29,7 +37,7 @@ if __name__ == "__main__":
         logger.warning(f"Could not initialize file logging: {e}")
 
     bot = TradingBot(
-        symbols=cfg["SYMBOLS"],
+        symbols=symbols,
         product_type=cfg["PRODUCT_TYPE"],
         news_api_key=cfg["NEWS_API_KEY"]
     )

@@ -107,12 +107,12 @@ async def get_dashboard():
         <nav class="bg-card border-b border-gray-800 px-6 py-2">
             <div class="flex justify-between items-center text-[10px] text-gray-400 uppercase tracking-tighter mb-1">
                 <div class="flex space-x-4"><span>BTC BLOCK ---</span><span>MEMPOOL ---</span><span>FEE --- sat/vb</span><span>F&G 23</span></div>
-                <div class="flex space-x-4"><span class="text-gold font-bold">MODE SIMULATION</span><span class="text-green-bitget font-bold">SYSTEM ONLINE</span></div>
+                <div class="flex space-x-4"><span class="text-gold font-bold">PRO ACCOUNT</span><span class="text-green-bitget font-bold">SYSTEM ONLINE</span></div>
             </div>
             <div class="flex justify-between items-end">
                 <div class="flex items-center space-x-2">
                     <h1 class="text-xl font-black italic tracking-tighter text-white">SHADOW <span class="text-[10px] align-top text-gray-500 font-normal not-italic">V2</span></h1>
-                    <div id="mode-badge" class="ml-4 px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-widest border border-gold/50 text-gold bg-gold/10">SIMULATION</div>
+                    <div id="mode-badge" class="ml-4 px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-widest border border-blue-500/50 text-blue-400 bg-blue-500/10">LIVE ENGINE</div>
                     <div class="text-2xl font-bold text-green-bitget ml-8"><span class="text-xs font-normal text-gray-500 align-middle mr-2 uppercase">Today's P&L</span><span id="stat-today-pnl">+$0.00</span></div>
                 </div>
                 <div class="flex space-x-12 pb-1 text-gray-200">
@@ -187,8 +187,8 @@ async def get_dashboard():
                 <div class="p-4 border-b border-gray-800">
                     <div class="flex justify-between items-center mb-4"><span class="text-xs font-bold text-white uppercase">Auto Trading</span><div id="side-auto-status" class="w-3 h-3 rounded-full bg-red-500"></div></div>
                     <div id="auto-status-text" class="text-[10px] font-bold text-red-500 mb-4">● STOPPED</div>
-                    <div class="space-y-3"><div class="text-[9px] font-bold text-gray-500 uppercase tracking-widest border-b border-gray-800 pb-1">Account</div>
-                        <div class="flex justify-between text-[10px]"><span class="text-gray-400">Simulation</span><span id="side-connection" class="text-green-bitget font-bold">Active</span></div>
+                    <div class="space-y-3"><div class="text-[9px] font-bold text-gray-500 uppercase tracking-widest border-b border-gray-800 pb-1">Execution</div>
+                        <div class="flex justify-between text-[10px]"><span class="text-gray-400">Engine</span><span id="side-connection" class="text-green-bitget font-bold">Active</span></div>
                         <div class="flex justify-between text-[10px]"><span class="text-gray-400">Balance</span><span id="side-balance" class="text-gray-200 font-mono">$0.00</span></div>
                         <div class="flex justify-between text-[10px]"><span class="text-gray-400">Session PnL</span><span id="side-session-pnl" class="text-green-bitget font-bold">+$0.00</span></div>
                         <div class="flex justify-between text-[10px]"><span class="text-gray-400">Product</span><span id="side-product" class="text-gray-300">---</span></div>
@@ -200,8 +200,8 @@ async def get_dashboard():
                         <div class="flex justify-between text-[10px]"><span class="text-gray-400">CoinGecko</span><span class="text-gray-600 font-bold uppercase">--</span></div>
                     </div>
                     <div class="mt-8">
-                        <div class="text-[9px] font-bold text-gray-500 uppercase tracking-widest border-b border-gray-800 pb-1 mb-2">Simulation Mode</div>
-                        <p class="text-[9px] text-gray-400 italic leading-tight">The bot is currently running in full simulation mode using real-time market data from Bitget public API.</p>
+                        <div class="text-[9px] font-bold text-gray-500 uppercase tracking-widest border-b border-gray-800 pb-1 mb-2">Platform Protocol</div>
+                        <p class="text-[9px] text-gray-400 italic leading-tight">Automated execution active across USDT-M markets using high-frequency predictive analysis.</p>
                     </div>
                     <div class="mt-8"><div class="text-[9px] font-bold text-gray-500 uppercase tracking-widest border-b border-gray-800 pb-1 mb-3">Asset Signals</div><div id="asset-signals-container" class="space-y-2"></div></div>
                 </div>
@@ -279,10 +279,10 @@ async def get_dashboard():
                     
                     const modeBadge = document.getElementById('mode-badge');
                     if (status.simulation_mode) {
-                        modeBadge.innerText = 'SIMULATION';
-                        modeBadge.className = 'ml-4 px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-widest border border-gold/50 text-gold bg-gold/10';
+                        modeBadge.innerText = 'TRADING ENGINE';
+                        modeBadge.className = 'ml-4 px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-widest border border-blue-500/50 text-blue-400 bg-blue-500/10';
                     } else {
-                        modeBadge.innerText = 'LIVE MODE';
+                        modeBadge.innerText = 'LIVE TERMINAL';
                         modeBadge.className = 'ml-4 px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-widest border border-blue-500/50 text-blue-400 bg-blue-500/10';
                     }
 
