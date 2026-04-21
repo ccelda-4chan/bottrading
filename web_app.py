@@ -19,9 +19,6 @@ SYMBOL_MAP = {
 
 def load_config():
     config = {
-        "API_KEY": os.getenv("BITGET_API_KEY", ""),
-        "API_SECRET": os.getenv("BITGET_API_SECRET", ""),
-        "API_PASSPHRASE": os.getenv("BITGET_API_PASSPHRASE", ""),
         "SYMBOLS": os.getenv("BITGET_SYMBOLS", "BTCUSDT,ETHUSDT,XRPUSDT").split(","),
         "PRODUCT_TYPE": os.getenv("BITGET_PRODUCT_TYPE", "usdt-futures"),
         "INTERVAL": int(os.getenv("BITGET_INTERVAL", "10")),
@@ -39,13 +36,10 @@ async def lifespan(app: FastAPI):
         except Exception as e:
             logger.warning(f"Could not initialize file logging: {e}")
 
-        logger.info("Initializing Bitget Trading Bot from Web App...")
+        logger.info("Initializing Simulation Trading Bot from Web App...")
         cfg = load_config()
         
         bot_instance = TradingBot(
-            api_key=cfg["API_KEY"],
-            api_secret=cfg["API_SECRET"],
-            passphrase=cfg["API_PASSPHRASE"],
             symbols=cfg["SYMBOLS"],
             product_type=cfg["PRODUCT_TYPE"],
             news_api_key=cfg["NEWS_API_KEY"]
@@ -113,12 +107,12 @@ async def get_dashboard():
         <nav class="bg-card border-b border-gray-800 px-6 py-2">
             <div class="flex justify-between items-center text-[10px] text-gray-400 uppercase tracking-tighter mb-1">
                 <div class="flex space-x-4"><span>BTC BLOCK ---</span><span>MEMPOOL ---</span><span>FEE --- sat/vb</span><span>F&G 23</span></div>
-                <div class="flex space-x-4"><span class="text-gold font-bold">MODE DEMO</span><span class="text-green-bitget font-bold">BITGET ON</span></div>
+                <div class="flex space-x-4"><span class="text-gold font-bold">MODE SIMULATION</span><span class="text-green-bitget font-bold">SYSTEM ONLINE</span></div>
             </div>
             <div class="flex justify-between items-end">
                 <div class="flex items-center space-x-2">
                     <h1 class="text-xl font-black italic tracking-tighter text-white">SHADOW <span class="text-[10px] align-top text-gray-500 font-normal not-italic">V2</span></h1>
-                    <div id="mode-badge" class="ml-4 px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-widest border border-blue-500/50 text-blue-400 bg-blue-500/10">LIVE MODE</div>
+                    <div id="mode-badge" class="ml-4 px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-widest border border-gold/50 text-gold bg-gold/10">SIMULATION</div>
                     <div class="text-2xl font-bold text-green-bitget ml-8"><span class="text-xs font-normal text-gray-500 align-middle mr-2 uppercase">Today's P&L</span><span id="stat-today-pnl">+$0.00</span></div>
                 </div>
                 <div class="flex space-x-12 pb-1 text-gray-200">
@@ -130,7 +124,7 @@ async def get_dashboard():
                     <div class="text-center"><div class="text-[9px] text-gray-500 uppercase">Win Rate</div><div id="stat-winrate" class="text-sm font-bold font-mono">0%</div></div>
                     <div class="text-center"><div class="text-[9px] text-gray-500 uppercase">Drawdown</div><div id="stat-drawdown" class="text-sm font-bold font-mono">0.0%</div></div>
                     <div class="text-center"><div class="text-[9px] text-gray-500 uppercase">Open</div><div id="stat-open" class="text-sm font-bold font-mono">0</div></div>
-                    <div class="flex items-center space-x-3 ml-4"><button class="bg-red-600/20 text-red-500 border border-red-600/50 px-3 py-0.5 rounded text-[10px] font-bold hover:bg-red-600/40 transition">HALT</button><div class="w-2 h-2 rounded-full bg-green-500 animate-pulse"></div></div>
+                    <div class="text-center"><div class="text-[9px] text-gray-500 uppercase">Status</div><div class="text-xs font-mono text-green-bitget">ONLINE</div></div>
                 </div>
             </div>
         </nav>
@@ -160,7 +154,6 @@ async def get_dashboard():
                             </select>
                             <button type="submit" class="px-2 py-1 text-[10px] bg-blue-600 rounded text-white font-bold uppercase transition hover:bg-blue-500">Apply</button>
                         </form>
-                        <div class="flex bg-accent rounded p-0.5 border border-gray-800"><button class="px-3 py-1 text-[10px] bg-blue-600 rounded shadow text-white">Price</button><button class="px-3 py-1 text-[10px] text-gray-500">Equity</button></div>
                     </div>
                 </div>
 
@@ -195,7 +188,7 @@ async def get_dashboard():
                     <div class="flex justify-between items-center mb-4"><span class="text-xs font-bold text-white uppercase">Auto Trading</span><div id="side-auto-status" class="w-3 h-3 rounded-full bg-red-500"></div></div>
                     <div id="auto-status-text" class="text-[10px] font-bold text-red-500 mb-4">● STOPPED</div>
                     <div class="space-y-3"><div class="text-[9px] font-bold text-gray-500 uppercase tracking-widest border-b border-gray-800 pb-1">Account</div>
-                        <div class="flex justify-between text-[10px]"><span class="text-gray-400">Bitget</span><span id="side-connection" class="text-red-bitget font-bold">Disconnected</span></div>
+                        <div class="flex justify-between text-[10px]"><span class="text-gray-400">Simulation</span><span id="side-connection" class="text-green-bitget font-bold">Active</span></div>
                         <div class="flex justify-between text-[10px]"><span class="text-gray-400">Balance</span><span id="side-balance" class="text-gray-200 font-mono">$0.00</span></div>
                         <div class="flex justify-between text-[10px]"><span class="text-gray-400">Session PnL</span><span id="side-session-pnl" class="text-green-bitget font-bold">+$0.00</span></div>
                         <div class="flex justify-between text-[10px]"><span class="text-gray-400">Product</span><span id="side-product" class="text-gray-300">---</span></div>
@@ -207,14 +200,20 @@ async def get_dashboard():
                         <div class="flex justify-between text-[10px]"><span class="text-gray-400">CoinGecko</span><span class="text-gray-600 font-bold uppercase">--</span></div>
                     </div>
                     <div class="mt-8">
-                        <div class="text-[9px] font-bold text-gray-500 uppercase tracking-widest border-b border-gray-800 pb-1 mb-2">Platform Note</div>
-                        <p class="text-[9px] text-gray-400 italic leading-tight">Render Free Tier sleeps after 15m. Use an external pinger to keep active.</p>
+                        <div class="text-[9px] font-bold text-gray-500 uppercase tracking-widest border-b border-gray-800 pb-1 mb-2">Simulation Mode</div>
+                        <p class="text-[9px] text-gray-400 italic leading-tight">The bot is currently running in full simulation mode using real-time market data from Bitget public API.</p>
                     </div>
                     <div class="mt-8"><div class="text-[9px] font-bold text-gray-500 uppercase tracking-widest border-b border-gray-800 pb-1 mb-3">Asset Signals</div><div id="asset-signals-container" class="space-y-2"></div></div>
                 </div>
                 <div class="mt-auto p-4 bg-dark/50 border-t border-gray-800">
                     <details class="text-xs group"><summary class="cursor-pointer text-gray-500 font-bold uppercase list-none flex justify-between items-center">Config <span class="group-open:rotate-180 transition">▼</span></summary>
-                        <form action="/update-settings" method="post" class="space-y-2 mt-2"><input type="text" name="api_key" placeholder="Key" class="w-full bg-accent border border-gray-800 rounded px-2 py-1 text-[10px] text-white"><input type="password" name="api_secret" placeholder="Secret" class="w-full bg-accent border border-gray-800 rounded px-2 py-1 text-[10px] text-white"><button type="submit" class="w-full py-1 bg-gray-800 hover:bg-gray-700 rounded text-[9px] font-bold uppercase transition">Save</button></form>
+                        <form action="/update-settings" method="post" class="space-y-2 mt-2">
+                            <select name="product_type" class="w-full bg-accent border border-gray-800 rounded px-2 py-1 text-[10px] text-white">
+                                <option value="usdt-futures">USDT-Futures</option>
+                                <option value="susdt-futures">Simulated-Futures</option>
+                            </select>
+                            <button type="submit" class="w-full py-1 bg-gray-800 hover:bg-gray-700 rounded text-[9px] font-bold uppercase transition">Update</button>
+                        </form>
                     </details>
                 </div>
             </aside>
@@ -378,9 +377,9 @@ async def manual_order(symbol: str = Form(...), side: str = Form(...), order_typ
     return RedirectResponse(url="/", status_code=303)
 
 @app.post("/update-settings")
-async def update_settings(api_key: str = Form(...), api_secret: str = Form(...), passphrase: str = Form(...), product_type: str = Form("usdt-futures")):
+async def update_settings(product_type: str = Form("usdt-futures")):
     if bot_instance:
-        bot_instance.update_settings(api_key, api_secret, passphrase, product_type=product_type)
+        bot_instance.update_settings(product_type=product_type)
     return RedirectResponse(url="/", status_code=303)
 
 @app.post("/apply-template")

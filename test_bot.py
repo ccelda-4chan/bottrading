@@ -1,7 +1,7 @@
 import requests
 import numpy as np
 from loguru import logger
-from bitget_client import BitgetDemoClient
+from bitget_client import BitgetPublicClient
 from strategy import Strategy
 
 # Mock classes to simulate Bitget response
@@ -28,10 +28,10 @@ def test_connectivity():
     
     # Test Client Initialization
     try:
-        client = BitgetDemoClient("test_key", "test_secret", "test_pass")
-        logger.info("BitgetDemoClient initialized: OK")
+        client = BitgetPublicClient()
+        logger.info("BitgetPublicClient initialized: OK")
     except Exception as e:
-        logger.error(f"BitgetDemoClient initialization: FAILED ({e})")
+        logger.error(f"BitgetPublicClient initialization: FAILED ({e})")
 
     logger.info("Test complete.")
 

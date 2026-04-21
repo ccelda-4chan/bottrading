@@ -1,1 +1,1 @@
-{"initial_balance": null, "auto_trade": false, "logs": [], "trades_count": 0, "virtual_balance": 0.0, "virtual_positions": {}, "simulation_mode": false}
+{"initial_balance": 10000.0, "auto_trade": true, "logs": [], "trades_count": 0, "virtual_balance": 10000.0, "virtual_positions": {}}
