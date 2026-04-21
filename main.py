@@ -26,9 +26,9 @@ if __name__ == "__main__":
     cfg = load_config()
     
     bot = TradingBot(
-        api_key=cfg["bg_0890dd661ffd67da87e32a8e07c42f0a"],
-        api_secret=cfg["bg_0890dd661ffd67da87e32a8e07c42f0a"],
-        passphrase=cfg["127642371"],
+        api_key=cfg["API_KEY"],
+        api_secret=cfg["API_SECRET"],
+        passphrase=cfg["API_PASSPHRASE"],
         symbols=cfg["SYMBOLS"]
     )
     

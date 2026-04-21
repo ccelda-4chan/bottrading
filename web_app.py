@@ -1,9 +1,46 @@
 from fastapi import FastAPI
 from fastapi.responses import HTMLResponse
 import os
+import threading
+from loguru import logger
+from bot import TradingBot
+from dotenv import load_dotenv
+
+load_dotenv()
+
+def load_config():
+    config = {
+        "API_KEY": os.getenv("BITGET_API_KEY", "your_api_key"),
+        "API_SECRET": os.getenv("BITGET_API_SECRET", "your_api_secret"),
+        "API_PASSPHRASE": os.getenv("BITGET_API_PASSPHRASE", "your_passphrase"),
+        "SYMBOLS": os.getenv("BITGET_SYMBOLS", "SBTCSUSDT,SETHSUSDT,SXRPSUSDT").split(","),
+        "INTERVAL": int(os.getenv("BITGET_INTERVAL", "60")),
+        "PORT": int(os.getenv("PORT", "8000"))
+    }
+    return config
 
 app = FastAPI()
 bot_instance = None
+
+@app.on_event("startup")
+async def startup_event():
+    global bot_instance
+    logger.add("bot.log", rotation="10 MB")
+    logger.info("Initializing Bitget Demo Trading Bot from Web App...")
+    
+    cfg = load_config()
+    
+    bot_instance = TradingBot(
+        api_key=cfg["API_KEY"],
+        api_secret=cfg["API_SECRET"],
+        passphrase=cfg["API_PASSPHRASE"],
+        symbols=cfg["SYMBOLS"]
+    )
+    
+    # Run bot in a separate thread
+    bot_thread = threading.Thread(target=bot_instance.run, kwargs={"interval": cfg["INTERVAL"]}, daemon=True)
+    bot_thread.start()
+    logger.info("Trading Bot started in background thread.")
 
 @app.get("/", response_class=HTMLResponse)
 async def get_dashboard():
