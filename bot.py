@@ -9,24 +9,36 @@ class TradingBot:
         self.strategy = Strategy()
         self.symbols = symbols
         self.is_running = False
+        self.auto_trade = False  # Added auto_trade flag
         self.status = {
             "balance": 0.0,
             "last_tick": "Never",
             "positions": {},
             "signals": {},
-            "is_active": False
+            "is_active": False,
+            "auto_trade": False,
+            "logs": []
         }
+
+    def add_log(self, message):
+        timestamp = time.strftime("%H:%M:%S")
+        self.status["logs"].append(f"[{timestamp}] {message}")
+        if len(self.status["logs"]) > 20:
+            self.status["logs"].pop(0)
 
     def run(self, interval=60):
         logger.info(f"Starting Trading Bot for symbols: {self.symbols}")
         self.is_running = True
         self.status["is_active"] = True
+        self.add_log("Bot Engine Started")
         
         while self.is_running:
             try:
                 self.tick()
+                self.status["auto_trade"] = self.auto_trade
             except Exception as e:
                 logger.error(f"Error during tick: {e}")
+                self.add_log(f"Tick Error: {str(e)}")
             
             time.sleep(interval)
 
@@ -77,27 +89,61 @@ class TradingBot:
         self.status["positions"][symbol] = current_pos if current_pos else "None"
 
         # Execution Logic
-        if signal == "LONG":
-            if current_pos and current_pos.get('holdSide') == 'short':
-                logger.info(f"Closing SHORT position for {symbol}")
-                self.client.place_order(symbol, side='buy', order_type='market', size=current_pos['total'])
-            
-            if not current_pos or current_pos.get('holdSide') != 'long':
-                size = self.strategy.calculate_position_size(balance, indicators['last_close'], indicators['atr'])
-                if size > 0:
-                    logger.info(f"Opening LONG position for {symbol} with size {size}")
-                    self.client.place_order(symbol, side='buy', order_type='market', size=size)
+        if self.auto_trade:
+            if signal == "LONG":
+                if current_pos and current_pos.get('holdSide') == 'short':
+                    logger.info(f"Closing SHORT position for {symbol}")
+                    self.add_log(f"Auto-closing SHORT for {symbol}")
+                    self.client.place_order(symbol, side='buy', order_type='market', size=current_pos['total'])
+                
+                if not current_pos or current_pos.get('holdSide') != 'long':
+                    size = self.strategy.calculate_position_size(balance, indicators['last_close'], indicators['atr'])
+                    if size > 0:
+                        logger.info(f"Opening LONG position for {symbol} with size {size}")
+                        self.add_log(f"Auto-opening LONG for {symbol} (size {size:.4f})")
+                        self.client.place_order(symbol, side='buy', order_type='market', size=size)
 
-        elif signal == "SHORT":
-            if current_pos and current_pos.get('holdSide') == 'long':
-                logger.info(f"Closing LONG position for {symbol}")
-                self.client.place_order(symbol, side='sell', order_type='market', size=current_pos['total'])
-            
-            if not current_pos or current_pos.get('holdSide') != 'short':
-                size = self.strategy.calculate_position_size(balance, indicators['last_close'], indicators['atr'])
-                if size > 0:
-                    logger.info(f"Opening SHORT position for {symbol} with size {size}")
-                    self.client.place_order(symbol, side='sell', order_type='market', size=size)
-
+            elif signal == "SHORT":
+                if current_pos and current_pos.get('holdSide') == 'long':
+                    logger.info(f"Closing LONG position for {symbol}")
+                    self.add_log(f"Auto-closing LONG for {symbol}")
+                    self.client.place_order(symbol, side='sell', order_type='market', size=current_pos['total'])
+                
+                if not current_pos or current_pos.get('holdSide') != 'short':
+                    size = self.strategy.calculate_position_size(balance, indicators['last_close'], indicators['atr'])
+                    if size > 0:
+                        logger.info(f"Opening SHORT position for {symbol} with size {size}")
+                        self.add_log(f"Auto-opening SHORT for {symbol} (size {size:.4f})")
+                        self.client.place_order(symbol, side='sell', order_type='market', size=size)
+            else:
+                logger.info(f"Holding {symbol}...")
         else:
-            logger.info(f"Holding {symbol}...")
+            logger.info(f"Auto-trade disabled. Skipping execution for {symbol}")
+
+    def manual_order(self, symbol, side, order_type, size):
+        self.add_log(f"Manual {side.upper()} order for {symbol} (size {size})")
+        return self.client.place_order(symbol, side=side, order_type=order_type, size=size)
+
+    def apply_template(self, template_name):
+        self.add_log(f"Applying template: {template_name}")
+        if template_name == "Scalp":
+            self.strategy.short_window = 5
+            self.strategy.long_window = 13
+            self.strategy.risk_per_trade = 0.005
+            for sym in self.symbols:
+                self.client.set_leverage(sym, 20)
+                self.client.set_margin_mode(sym, "isolated")
+        elif template_name == "Swing":
+            self.strategy.short_window = 20
+            self.strategy.long_window = 50
+            self.strategy.risk_per_trade = 0.02
+            for sym in self.symbols:
+                self.client.set_leverage(sym, 5)
+                self.client.set_margin_mode(sym, "crossed")
+        elif template_name == "Default":
+            self.strategy.short_window = 9
+            self.strategy.long_window = 21
+            self.strategy.risk_per_trade = 0.01
+            for sym in self.symbols:
+                self.client.set_leverage(sym, 10)
+        return True

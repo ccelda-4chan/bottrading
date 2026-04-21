@@ -101,3 +101,23 @@ class BitgetDemoClient:
         if symbol:
             params["symbol"] = symbol
         return self.request("GET", "/api/v2/mix/position/all-position", params=params)
+
+    def set_leverage(self, symbol, leverage, margin_coin="USDT", hold_side="long"):
+        body = {
+            "symbol": symbol,
+            "productType": "usdt-futures",
+            "marginCoin": margin_coin,
+            "leverage": str(leverage),
+            "holdSide": hold_side
+        }
+        return self.request("POST", "/api/v2/mix/account/set-leverage", body=body)
+
+    def set_margin_mode(self, symbol, margin_mode, margin_coin="USDT"):
+        # margin_mode: isolated, crossed
+        body = {
+            "symbol": symbol,
+            "productType": "usdt-futures",
+            "marginCoin": margin_coin,
+            "marginMode": margin_mode
+        }
+        return self.request("POST", "/api/v2/mix/account/set-margin-mode", body=body)
