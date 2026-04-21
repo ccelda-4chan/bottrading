@@ -15,7 +15,7 @@ def load_config():
         "API_SECRET": os.getenv("BITGET_API_SECRET", "your_api_secret"),
         "API_PASSPHRASE": os.getenv("BITGET_API_PASSPHRASE", "your_passphrase"),
         "SYMBOLS": os.getenv("BITGET_SYMBOLS", "SBTCSUSDT,SETHSUSDT,SXRPSUSDT").split(","),
-        "INTERVAL": int(os.getenv("BITGET_INTERVAL", "60")),
+        "INTERVAL": int(os.getenv("BITGET_INTERVAL", "10")),
         "PORT": int(os.getenv("PORT", "8000"))
     }
     return config
@@ -27,7 +27,7 @@ bot_instance = None
 async def startup_event():
     global bot_instance
     logger.add("bot.log", rotation="10 MB")
-    logger.info("Initializing Bitget Demo Trading Bot from Web App...")
+    logger.info("Initializing Bitget Trading Bot from Web App...")
     
     cfg = load_config()
     
@@ -42,6 +42,12 @@ async def startup_event():
     bot_thread = threading.Thread(target=bot_instance.run, kwargs={"interval": cfg["INTERVAL"]}, daemon=True)
     bot_thread.start()
     logger.info("Trading Bot started in background thread.")
+
+@app.get("/api/status")
+async def get_status():
+    if not bot_instance:
+        return {"error": "Bot not initialized"}
+    return bot_instance.status
 
 @app.get("/", response_class=HTMLResponse)
 async def get_dashboard():
@@ -58,24 +64,27 @@ async def get_dashboard():
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
         <title>Bitget Pro Dashboard</title>
         <script src="https://cdn.tailwindcss.com"></script>
-        <meta http-equiv="refresh" content="15">
         <style>
             .bg-dark {{ background-color: #0b0e11; }}
             .bg-card {{ background-color: #1e2329; }}
             .text-gold {{ color: #f0b90b; }}
             .border-gold {{ border-color: #f0b90b; }}
+            .fade-in {{ animation: fadeIn 0.5s ease-in; }}
+            @keyframes fadeIn {{ from {{ opacity: 0; }} to {{ opacity: 1; }} }}
         </style>
     </head>
     <body class="bg-dark text-gray-200 font-sans">
+        <audio id="snd-order" src="https://assets.mixkit.co/active_storage/sfx/2568/2568-preview.mp3"></audio>
+
         <nav class="bg-card border-b border-gray-700 p-4">
             <div class="container mx-auto flex justify-between items-center">
                 <h1 class="text-2xl font-bold text-gold">Bitget <span class="text-white">Pro Bot</span></h1>
                 <div class="flex items-center space-x-6">
                     <div class="flex flex-col items-end">
-                        <span class="text-xs text-gray-400">Total Balance</span>
-                        <span class="text-lg font-mono text-green-400">{status['balance']:.2f} USDT</span>
+                        <span class="text-xs text-gray-400 uppercase tracking-wider">Total Balance</span>
+                        <span id="top-balance" class="text-xl font-mono text-green-400 font-bold">{status['balance']:.2f} USDT</span>
                     </div>
-                    <div class="px-3 py-1 rounded-full text-xs font-bold { 'bg-green-900 text-green-300' if status['is_active'] else 'bg-red-900 text-red-300' }">
+                    <div id="engine-status" class="px-3 py-1 rounded-full text-xs font-bold { 'bg-green-900 text-green-300' if status['is_active'] else 'bg-red-900 text-red-300' }">
                         { "ENGINE ONLINE" if status['is_active'] else "ENGINE OFFLINE" }
                     </div>
                 </div>
@@ -83,12 +92,11 @@ async def get_dashboard():
         </nav>
 
         <main class="container mx-auto p-6 grid grid-cols-1 lg:grid-cols-3 gap-6">
-            <!-- Left: Market Overview -->
             <div class="lg:col-span-2 space-y-6">
                 <div class="bg-card rounded-lg p-6 shadow-lg border border-gray-800">
                     <div class="flex justify-between items-center mb-4">
                         <h2 class="text-xl font-semibold">Market Overview</h2>
-                        <span class="text-xs text-gray-500">Last Tick: {status['last_tick']}</span>
+                        <span id="last-tick" class="text-xs text-gray-500 font-mono">Last Tick: {status['last_tick']}</span>
                     </div>
                     <div class="overflow-x-auto">
                         <table class="w-full text-left">
@@ -100,13 +108,12 @@ async def get_dashboard():
                                     <th class="pb-3 text-right">Action</th>
                                 </tr>
                             </thead>
-                            <tbody class="divide-y divide-gray-800">
+                            <tbody id="market-body" class="divide-y divide-gray-800">
     """
     
     for symbol in bot_instance.symbols:
         signal = status['signals'].get(symbol, "WAITING")
         pos = status['positions'].get(symbol, "None")
-        
         signal_color = "text-green-400" if signal == "LONG" else "text-red-400" if signal == "SHORT" else "text-gray-400"
         
         pos_str = "No Position"
@@ -118,7 +125,7 @@ async def get_dashboard():
             pos_str = f"<span class='font-bold'>{side}</span> {size} (<span class='{pnl_color}'>{pnl}</span>)"
         
         html_content += f"""
-                                <tr>
+                                <tr class="hover:bg-gray-800/50 transition">
                                     <td class="py-4 font-bold">{symbol}</td>
                                     <td class="py-4 {signal_color} font-mono">{signal}</td>
                                     <td class="py-4 text-sm">{pos_str}</td>
@@ -126,22 +133,23 @@ async def get_dashboard():
                                         <form action="/manual-order" method="post" class="inline">
                                             <input type="hidden" name="symbol" value="{symbol}">
                                             <input type="hidden" name="side" value="close">
-                                            <button type="submit" class="text-xs bg-red-600 hover:bg-red-700 text-white px-3 py-1 rounded">Close</button>
+                                            <button type="submit" class="text-xs bg-red-900/30 text-red-400 border border-red-900/50 px-3 py-1 rounded hover:bg-red-900/50 transition">
+                                                Close
+                                            </button>
                                         </form>
                                     </td>
                                 </tr>
         """
         
-    html_content += f"""
+    html_content += """
                             </tbody>
                         </table>
                     </div>
                 </div>
 
-                <!-- Bot Logs -->
                 <div class="bg-card rounded-lg p-6 shadow-lg border border-gray-800">
                     <h2 class="text-xl font-semibold mb-4">Activity Logs</h2>
-                    <div class="bg-black rounded p-4 font-mono text-xs h-48 overflow-y-auto space-y-1 text-gray-400">
+                    <div id="log-container" class="bg-black rounded p-4 font-mono text-xs h-48 overflow-y-auto space-y-1 text-gray-400">
     """
     for log in reversed(status.get('logs', [])):
         html_content += f"<div>{log}</div>"
@@ -151,9 +159,7 @@ async def get_dashboard():
                 </div>
             </div>
 
-            <!-- Right: Controls -->
             <div class="space-y-6">
-                <!-- Trading Modes -->
                 <div class="bg-card rounded-lg p-6 shadow-lg border border-gray-800">
                     <h2 class="text-xl font-semibold mb-4">Trading Mode</h2>
                     <div class="flex items-center justify-between p-4 bg-gray-800 rounded-lg">
@@ -184,13 +190,12 @@ async def get_dashboard():
                     </div>
                 </div>
 
-                <!-- Manual Trade Panel -->
                 <div class="bg-card rounded-lg p-6 shadow-lg border border-gray-800">
                     <h2 class="text-xl font-semibold mb-4 text-gold">Manual Trade</h2>
                     <form action="/manual-order" method="post" class="space-y-4">
                         <div>
                             <label class="block text-xs text-gray-400 mb-1">Symbol</label>
-                            <select name="symbol" class="w-full bg-gray-800 border border-gray-700 rounded p-2 text-sm">
+                            <select name="symbol" class="w-full bg-gray-800 border border-gray-700 rounded p-2 text-sm text-white">
     """
     for sym in bot_instance.symbols:
         html_content += f"<option value='{sym}'>{sym}</option>"
@@ -201,21 +206,21 @@ async def get_dashboard():
                         <div class="grid grid-cols-2 gap-4">
                             <div>
                                 <label class="block text-xs text-gray-400 mb-1">Side</label>
-                                <select name="side" class="w-full bg-gray-800 border border-gray-700 rounded p-2 text-sm">
+                                <select name="side" class="w-full bg-gray-800 border border-gray-700 rounded p-2 text-sm text-white">
                                     <option value="buy">BUY / LONG</option>
                                     <option value="sell">SELL / SHORT</option>
                                 </select>
                             </div>
                             <div>
                                 <label class="block text-xs text-gray-400 mb-1">Type</label>
-                                <select name="order_type" class="w-full bg-gray-800 border border-gray-700 rounded p-2 text-sm">
+                                <select name="order_type" class="w-full bg-gray-800 border border-gray-700 rounded p-2 text-sm text-white">
                                     <option value="market">Market</option>
                                 </select>
                             </div>
                         </div>
                         <div>
                             <label class="block text-xs text-gray-400 mb-1">Size (Contracts)</label>
-                            <input type="number" name="size" step="0.001" value="0.01" class="w-full bg-gray-800 border border-gray-700 rounded p-2 text-sm">
+                            <input type="number" name="size" step="0.001" value="0.01" class="w-full bg-gray-800 border border-gray-700 rounded p-2 text-sm text-white">
                         </div>
                         <button type="submit" class="w-full py-3 bg-gold hover:bg-yellow-600 text-black font-bold rounded transition mt-2">
                             Execute Order
@@ -226,8 +231,55 @@ async def get_dashboard():
         </main>
         
         <footer class="container mx-auto p-6 text-center text-gray-600 text-xs">
-            Bitget Demo Trading Terminal | Production Ready | {time.strftime("%Y")}
+            Bitget Trading Terminal | Production Ready | {time.strftime("%Y")}
         </footer>
+
+        <script>
+            let lastEventTime = Date.now() / 1000;
+            
+            async function updateDashboard() {
+                try {
+                    const res = await fetch('/api/status');
+                    const status = await res.json();
+                    
+                    const balEl = document.getElementById('top-balance');
+                    const newBal = parseFloat(status.balance).toFixed(2);
+                    if (balEl.innerText !== newBal + ' USDT') {
+                        balEl.innerText = newBal + ' USDT';
+                        balEl.classList.add('fade-in');
+                        setTimeout(() => balEl.classList.remove('fade-in'), 500);
+                    }
+                    
+                    document.getElementById('last-tick').innerText = 'Last Tick: ' + status.last_tick;
+                    
+                    const logContainer = document.getElementById('log-container');
+                    const logHtml = status.logs.slice().reverse().map(l => `<div>${l}</div>`).join('');
+                    logContainer.innerHTML = logHtml;
+                    
+                    const engineEl = document.getElementById('engine-status');
+                    if (status.is_active) {
+                        engineEl.className = 'px-3 py-1 rounded-full text-xs font-bold bg-green-900 text-green-300';
+                        engineEl.innerText = 'ENGINE ONLINE';
+                    } else {
+                        engineEl.className = 'px-3 py-1 rounded-full text-xs font-bold bg-red-900 text-red-300';
+                        engineEl.innerText = 'ENGINE OFFLINE';
+                    }
+
+                    if (status.events && status.events.length > 0) {
+                        const latest = status.events[status.events.length - 1];
+                        if (latest.ts > lastEventTime) {
+                            document.getElementById('snd-order').play().catch(e => console.log("Audio play blocked"));
+                            lastEventTime = latest.ts;
+                        }
+                    }
+                    
+                } catch (e) {
+                    console.error("Failed to fetch status", e);
+                }
+            }
+
+            setInterval(updateDashboard, 2000);
+        </script>
     </body>
     </html>
     """

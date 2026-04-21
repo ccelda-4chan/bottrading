@@ -17,8 +17,15 @@ class TradingBot:
             "signals": {},
             "is_active": False,
             "auto_trade": False,
-            "logs": []
+            "logs": [],
+            "events": [] # To store sound events
         }
+
+    def add_event(self, event_type):
+        # event_type can be 'place_order', 'tp', 'sl'
+        self.status["events"].append({"type": event_type, "ts": time.time()})
+        if len(self.status["events"]) > 5:
+            self.status["events"].pop(0)
 
     def add_log(self, message):
         timestamp = time.strftime("%H:%M:%S")
@@ -26,7 +33,7 @@ class TradingBot:
         if len(self.status["logs"]) > 20:
             self.status["logs"].pop(0)
 
-    def run(self, interval=60):
+    def run(self, interval=10):
         logger.info(f"Starting Trading Bot for symbols: {self.symbols}")
         self.is_running = True
         self.status["is_active"] = True
@@ -99,8 +106,9 @@ class TradingBot:
                 if not current_pos or current_pos.get('holdSide') != 'long':
                     size = self.strategy.calculate_position_size(balance, indicators['last_close'], indicators['atr'])
                     if size > 0:
-                        logger.info(f"Opening LONG position for {symbol} with size {size}")
+                        logger.info(f"Auto-opening LONG for {symbol} (size {size:.4f})")
                         self.add_log(f"Auto-opening LONG for {symbol} (size {size:.4f})")
+                        self.add_event("place_order")
                         self.client.place_order(symbol, side='buy', order_type='market', size=size)
 
             elif signal == "SHORT":
@@ -112,8 +120,9 @@ class TradingBot:
                 if not current_pos or current_pos.get('holdSide') != 'short':
                     size = self.strategy.calculate_position_size(balance, indicators['last_close'], indicators['atr'])
                     if size > 0:
-                        logger.info(f"Opening SHORT position for {symbol} with size {size}")
+                        logger.info(f"Auto-opening SHORT for {symbol} (size {size:.4f})")
                         self.add_log(f"Auto-opening SHORT for {symbol} (size {size:.4f})")
+                        self.add_event("place_order")
                         self.client.place_order(symbol, side='sell', order_type='market', size=size)
             else:
                 logger.info(f"Holding {symbol}...")
@@ -122,6 +131,7 @@ class TradingBot:
 
     def manual_order(self, symbol, side, order_type, size):
         self.add_log(f"Manual {side.upper()} order for {symbol} (size {size})")
+        self.add_event("place_order")
         return self.client.place_order(symbol, side=side, order_type=order_type, size=size)
 
     def apply_template(self, template_name):

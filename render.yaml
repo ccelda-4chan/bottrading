@@ -14,4 +14,4 @@ services:
       - key: BITGET_SYMBOLS
         value: "SBTCSUSDT,SETHSUSDT,SXRPSUSDT"
       - key: BITGET_INTERVAL
-        value: "60"
+        value: "10"

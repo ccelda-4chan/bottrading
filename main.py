@@ -14,14 +14,14 @@ def load_config():
         "API_SECRET": os.getenv("BITGET_API_SECRET", "your_api_secret"),
         "API_PASSPHRASE": os.getenv("BITGET_API_PASSPHRASE", "your_passphrase"),
         "SYMBOLS": os.getenv("BITGET_SYMBOLS", "SBTCSUSDT,SETHSUSDT,SXRPSUSDT").split(","),
-        "INTERVAL": int(os.getenv("BITGET_INTERVAL", "60")),
+        "INTERVAL": int(os.getenv("BITGET_INTERVAL", "10")),
         "PORT": int(os.getenv("PORT", "8000"))
     }
     return config
 
 if __name__ == "__main__":
     logger.add("bot.log", rotation="10 MB")
-    logger.info("Initializing Bitget Demo Trading Bot with Web UI...")
+    logger.info("Initializing Bitget Trading Bot with Web UI...")
     
     cfg = load_config()
     
