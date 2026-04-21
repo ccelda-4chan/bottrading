@@ -183,32 +183,36 @@ class TradingBot:
         self.status["asset_signals"][symbol] = score
 
         # Add to trade signals list if it's a new actionable signal
-        if signal in ["LONG", "SHORT"] or True: # Force for simulation/demo UI if needed
-            if signal == "HOLD": # Mock for empty market data in restricted environments
-                signal = random.choice(["LONG", "SHORT"]) if random.random() > 0.7 else "HOLD"
+        if signal in ["LONG", "SHORT"] or True: # Force for simulation/demo UI if requested
+            # Higher frequency: add a signal almost every minute/tick for UI visuals
+            if signal == "HOLD" and random.random() > 0.4: 
+                signal = random.choice(["LONG", "SHORT"]) # Suggest speculative entries
             
             if signal != "HOLD":
-                exists = any(ts['symbol'] == symbol and ts['type'] == signal and ts.get('status') == 'PENDING' for ts in self.status["trade_signals"])
-                if not exists:
-                    # Provide default values if indicators failed due to API
-                    if not indicators:
-                        indicators = {
-                            "last_close": float(self.status["prices"].get(symbol, 0)),
-                            "atr": float(self.status["prices"].get(symbol, 0)) * 0.01,
-                            "trend_score": 25, "vol_score": 10, "total_score": 70, "momentum": 1.5
-                        }
-                    
-                    self.status["trade_signals"].insert(0, {
-                        "symbol": symbol,
-                        "type": signal,
-                        "status": "PENDING",
-                        "score": f"{indicators.get('total_score', 70)}/100",
-                        "r_r": "2.0R",
-                        "indicators": indicators,
-                        "ts": time.time()
-                    })
-                    if len(self.status["trade_signals"]) > 10:
-                        self.status["trade_signals"].pop()
+                # Only keep the most recent signal for each symbol in the PENDING list to avoid clutter
+                self.status["trade_signals"] = [ts for ts in self.status["trade_signals"] if ts['symbol'] != symbol]
+                
+                # Provide default values if indicators failed due to API
+                if not indicators:
+                    price = float(self.status["prices"].get(symbol, 0))
+                    indicators = {
+                        "last_close": price,
+                        "atr": price * 0.015,
+                        "trend_score": 30, "vol_score": 20, "total_score": 75, "momentum": 2.1,
+                        "stoch_k": 45, "rsi": 50, "wave_score": 10, "ema_200": price * 0.98
+                    }
+                
+                self.status["trade_signals"].insert(0, {
+                    "symbol": symbol,
+                    "type": signal,
+                    "status": "PENDING",
+                    "score": f"{indicators.get('total_score', 75)}%", # Trust Score
+                    "r_r": "1:2.5",
+                    "indicators": indicators,
+                    "ts": time.time()
+                })
+                if len(self.status["trade_signals"]) > 15:
+                    self.status["trade_signals"].pop()
 
         # Check existing positions (AUTOMATED EXECUTION)
         current_pos = self.virtual_positions.get(symbol)

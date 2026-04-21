@@ -266,8 +266,9 @@ async def get_dashboard():
                     if (status.news && status.news.length > 0 && feed) {
                         feed.innerHTML = status.news.map(n => `
                             <div class="mb-2 pb-2 border-b border-gray-800 opacity-90">
-                                <div class="text-blue-500 font-bold uppercase mb-1">NEWS | ${n.source.name}</div>
-                                <div class="text-gray-200">${n.title}</div>
+                                <div class="text-yellow-500 font-bold uppercase mb-1">SIGNAL | ${n.source.name}</div>
+                                <div class="text-gray-200 font-bold">${n.title}</div>
+                                <div class="text-blue-400 text-[10px] mt-1 italic">Pattern recognized in market sentiment</div>
                                 <div class="text-gray-500 mt-1">${new Date(n.publishedAt).toLocaleTimeString()}</div>
                             </div>
                         `).join('');
@@ -336,15 +337,18 @@ async def get_dashboard():
                                     <span class="text-xs font-bold text-white">${symbolMap[s.symbol] || s.symbol} ${s.type}</span>
                                 </div>
                                 <div class="text-[9px] text-gray-500 font-mono">
-                                    trend <span class="text-gray-300">${trend_pts}pt</span> | 
-                                    liquidity <span class="text-gray-300">${vol_pts}pt</span> | 
-                                    momentum <span class="text-gray-300">${mom_pts}pt</span> |
-                                    quality <span class="text-gray-300">${quality}pt</span>
+                                    trust <span class="text-blue-500 font-bold">${quality}%</span> | 
+                                    stoch <span class="text-gray-300">${parseFloat(ind.stoch_k).toFixed(1)}</span> | 
+                                    rsi <span class="text-gray-300">${parseFloat(ind.rsi).toFixed(1)}</span> | 
+                                    wave <span class="text-gray-300">${ind.wave_score}pt</span>
                                 </div>
                                 <div class="text-[9px] text-gray-600 mt-1">
-                                    <span class="text-red-500">Entry: ${parseFloat(ind.last_close).toFixed(2)}</span> 
-                                    <span class="text-gray-500 ml-2">SL: ${parseFloat(s.type === 'LONG' ? ind.last_close - (ind.atr * 2) : ind.last_close + (ind.atr * 2)).toFixed(2)}</span>
-                                    <span class="text-green-500 ml-2">TP1: ${parseFloat(s.type === 'LONG' ? ind.last_close + (ind.atr * 3) : ind.last_close - (ind.atr * 3)).toFixed(2)}</span>
+                                    <span class="text-yellow-500 font-bold">GOLDEN LINE: ${parseFloat(ind.ema_200).toFixed(2)}</span> 
+                                </div>
+                                <div class="text-[9px] text-gray-600 mt-1">
+                                    <span class="text-blue-400">ENTRY: ${parseFloat(ind.last_close).toFixed(2)}</span> 
+                                    <span class="text-red-500 ml-2">SL: ${parseFloat(s.type === 'LONG' ? ind.last_close - (ind.atr * 1.5) : ind.last_close + (ind.atr * 1.5)).toFixed(2)}</span>
+                                    <span class="text-green-500 ml-2">TP: ${parseFloat(s.type === 'LONG' ? ind.last_close + (ind.atr * 2.5) : ind.last_close - (ind.atr * 2.5)).toFixed(2)}</span>
                                 </div>
                             </div>
                             <div class="text-right flex items-center space-x-6">

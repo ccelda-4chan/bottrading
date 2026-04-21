@@ -33,13 +33,14 @@ class Strategy:
         # Calculate EMAs
         ema_short = self._ema(closes, self.short_window)
         ema_long = self._ema(closes, self.long_window)
-        ema_200 = self._ema(closes, 200) if len(closes) >= 200 else ema_long # Filter for trend
+        ema_200 = self._ema(closes, 200) if len(closes) >= 200 else ema_long # Golden Line / Trend filter
         
         # Calculate ATR
         atr = self._atr(highs, lows, closes, self.atr_window)
 
-        # RSI
+        # RSI and Stochastic RSI
         rsi = self._rsi(closes, 14)
+        stoch_k, stoch_d = self._stoch_rsi(rsi, 14, 3, 3)
 
         # Bollinger Bands
         bb_upper, bb_lower, bb_mid = self._bollinger_bands(closes, 20)
@@ -47,18 +48,28 @@ class Strategy:
         # Momentum (ROC)
         momentum = ((closes[-1] - closes[-10]) / closes[-10]) * 100 if len(closes) > 10 else 0
 
+        # Elliott 5th Wave Recognition (Simplified: Look for 3 higher highs/lows)
+        wave_pts = self._detect_waves(highs, lows)
+
         # Trend strength (Ad-hoc)
         trend_pts = 0
         if ema_short[-1] > ema_long[-1]: trend_pts += 25
         if closes[-1] > ema_200[-1]: trend_pts += 15
         
+        # Golden Line alignment (Close near EMA 200/50)
+        golden_line_score = 15 if abs(closes[-1] - ema_200[-1]) / ema_200[-1] < 0.01 else 0
+
         # Liquidity/Volume score (Ad-hoc)
         vol_avg = np.mean(volumes[-10:])
         vol_pts = 10 if volumes[-1] > vol_avg else 0
 
-        # Score calculation (0-100)
-        score = trend_pts + vol_pts + (20 if rsi < 30 or rsi > 70 else 0) + 15
-        score = min(100, score)
+        # Trust Score calculation (0-100)
+        # Trust Score = Alignment of RSI, Stoch, EMA, BB, Waves
+        trust_score = trend_pts + vol_pts + golden_line_score + wave_pts
+        if stoch_k[-1] < 20 or stoch_k[-1] > 80: trust_score += 15
+        if abs(rsi[-1] - 50) > 20: trust_score += 15
+        
+        trust_score = min(100, trust_score)
 
         return {
             "symbol": symbol,
@@ -70,14 +81,52 @@ class Strategy:
             "atr": atr[-1],
             "last_close": closes[-1],
             "rsi": rsi[-1],
+            "stoch_k": stoch_k[-1],
+            "stoch_d": stoch_d[-1],
             "bb_upper": bb_upper[-1],
             "bb_lower": bb_lower[-1],
             "bb_mid": bb_mid[-1],
             "momentum": momentum,
             "vol_score": vol_pts,
             "trend_score": trend_pts,
-            "total_score": score
+            "wave_score": wave_pts,
+            "total_score": trust_score # Trust Score
         }
+
+    def _stoch_rsi(self, rsi, window, k_period, d_period):
+        rsi_min = np.zeros_like(rsi)
+        rsi_max = np.zeros_like(rsi)
+        for i in range(window, len(rsi)):
+            rsi_min[i] = np.min(rsi[i-window+1:i+1])
+            rsi_max[i] = np.max(rsi[i-window+1:i+1])
+        
+        stoch_rsi = np.zeros_like(rsi)
+        denom = rsi_max - rsi_min
+        stoch_rsi = np.divide(rsi - rsi_min, denom, out=np.zeros_like(rsi), where=denom!=0) * 100
+        
+        # Smoothing
+        stoch_k = np.convolve(stoch_rsi, np.ones(k_period)/k_period, mode='same')
+        stoch_d = np.convolve(stoch_k, np.ones(d_period)/d_period, mode='same')
+        return stoch_k, stoch_d
+
+    def _detect_waves(self, highs, lows):
+        """
+        Simplified Elliott Wave 5th Wave Detection:
+        Looks for series of higher highs and higher lows in the last 50 bars.
+        """
+        if len(highs) < 20: return 0
+        
+        # Find local peaks/troughs
+        last_20_highs = highs[-20:]
+        last_20_lows = lows[-20:]
+        
+        # Very crude check: are we in a general uptrend but showing signs of exhaustion?
+        # Or are we starting a 5th wave after a correction?
+        # For now, let's use a point system for 'Wave Potential'
+        pts = 0
+        if highs[-1] > np.mean(last_20_highs): pts += 10
+        if lows[-1] > np.mean(last_20_lows): pts += 10
+        return pts
 
     def _ema(self, data, window):
         alpha = 2 / (window + 1)
@@ -135,9 +184,11 @@ class Strategy:
         # Base signal from EMA Crossover
         signal = "HOLD"
         
-        # Trend check
+        # Trend indicators
         trend_up = indicators["ema_short"] > indicators["ema_long"]
         trend_strong_up = indicators["last_close"] > indicators["ema_200"]
+        stoch_rsi_low = indicators["stoch_k"] < 20
+        stoch_rsi_high = indicators["stoch_k"] > 80
         
         # Standard Cross
         if indicators["ema_short"] > indicators["ema_long"] and indicators["prev_ema_short"] <= indicators["prev_ema_long"]:
@@ -145,30 +196,41 @@ class Strategy:
         elif indicators["ema_short"] < indicators["ema_long"] and indicators["prev_ema_short"] >= indicators["prev_ema_long"]:
             signal = "SHORT"
 
-        # Risky Mode: Aggressive entry points using RSI and BB
-        if self.mode == "Risky":
+        # Stochastic RSI Reversals (High Frequency)
+        if signal == "HOLD":
+            if stoch_rsi_low and indicators["stoch_k"] > indicators["stoch_d"]:
+                signal = "LONG"
+            elif stoch_rsi_high and indicators["stoch_k"] < indicators["stoch_d"]:
+                signal = "SHORT"
+
+        # Risky Mode: Aggressive entry points using RSI, BB, and Waves
+        if self.mode == "Risky" or True: # Making it more aggressive by default as requested
             current_price = indicators["last_close"]
             rsi = indicators["rsi"]
             
             # Oversold + BB Lower touch = Risky Long (Aggressive reversal)
-            if rsi < 30 or current_price < indicators["bb_lower"]:
+            if rsi < 35 or current_price < indicators["bb_lower"]:
                 if signal == "HOLD": signal = "LONG"
             
             # Overbought + BB Upper touch = Risky Short (Aggressive reversal)
-            if rsi > 70 or current_price > indicators["bb_upper"]:
+            if rsi > 65 or current_price > indicators["bb_upper"]:
                 if signal == "HOLD": signal = "SHORT"
 
             # Trend Continuation (Aggressive)
             if signal == "HOLD":
-                if trend_up and trend_strong_up and rsi < 60:
-                    signal = "LONG" # Buy the dip in strong uptrend
-                elif not trend_up and not trend_strong_up and rsi > 40:
-                    signal = "SHORT" # Sell the rip in strong downtrend
+                if trend_up and trend_strong_up and rsi < 65:
+                    signal = "LONG" # Buy the dip
+                elif not trend_up and not trend_strong_up and rsi > 35:
+                    signal = "SHORT" # Sell the rip
         
+        # Wave 5 potential (Add trust but also trigger)
+        if indicators["wave_score"] >= 20 and signal == "HOLD":
+            signal = "LONG" if trend_up else "SHORT"
+
         # News override/boost
-        if news_sentiment > 2:
+        if news_sentiment > 1.5:
             signal = "LONG" # News-driven scalp
-        if news_sentiment < -2:
+        if news_sentiment < -1.5:
             signal = "SHORT" # News-driven dump
             
         return signal
