@@ -125,6 +125,7 @@ async def get_dashboard():
                             <thead class="text-gray-500 text-xs uppercase border-b border-gray-700">
                                 <tr>
                                     <th class="pb-3">Asset</th>
+                                    <th class="pb-3">Price</th>
                                     <th class="pb-3">Signal</th>
                                     <th class="pb-3">Active Position</th>
                                     <th class="pb-3 text-right">Action</th>
@@ -135,6 +136,7 @@ async def get_dashboard():
     
     for symbol in bot_instance.symbols:
         display_name = SYMBOL_MAP.get(symbol, symbol)
+        price = status['prices'].get(symbol, "0.00")
         signal = status['signals'].get(symbol, "WAITING")
         pos = status['positions'].get(symbol, "None")
         signal_color = "text-green-400" if signal == "LONG" else "text-red-400" if signal == "SHORT" else "text-gray-400"
@@ -150,6 +152,7 @@ async def get_dashboard():
         html_content += f"""
                                 <tr class="hover:bg-gray-800/50 transition">
                                     <td class="py-4 font-bold">{display_name}</td>
+                                    <td class="py-4 font-mono text-gray-300">${float(price):,.2f}</td>
                                     <td class="py-4 {signal_color} font-mono">{signal}</td>
                                     <td class="py-4 text-sm">{pos_str}</td>
                                     <td class="py-4 text-right">
@@ -183,6 +186,34 @@ async def get_dashboard():
             </div>
 
             <div class="space-y-6">
+                <div class="bg-card rounded-lg p-6 shadow-lg border border-gray-800">
+                    <div class="flex justify-between items-center mb-4">
+                        <h2 class="text-xl font-semibold text-gold">Live Market Analysis</h2>
+                    </div>
+                    <!-- TradingView Widget BEGIN -->
+                    <div class="tradingview-widget-container" style="height: 400px;">
+                        <div id="tradingview_widget"></div>
+                        <script type="text/javascript" src="https://s3.tradingview.com/tv.js"></script>
+                        <script type="text/javascript">
+                        new TradingView.widget({
+                            "autosize": true,
+                            "symbol": "BITGET:BTCUSDT.P",
+                            "interval": "60",
+                            "timezone": "Etc/UTC",
+                            "theme": "dark",
+                            "style": "1",
+                            "locale": "en",
+                            "toolbar_bg": "#f1f3f6",
+                            "enable_publishing": false,
+                            "hide_top_toolbar": true,
+                            "save_image": false,
+                            "container_id": "tradingview_widget"
+                        });
+                        </script>
+                    </div>
+                    <!-- TradingView Widget END -->
+                </div>
+
                 <div class="bg-card rounded-lg p-6 shadow-lg border border-gray-800">
                     <h2 class="text-xl font-semibold mb-4 text-gold">API Configuration</h2>
                     <form action="/update-settings" method="post" class="space-y-3">
@@ -312,9 +343,10 @@ async def get_dashboard():
                     // Update Market Table
                     const marketBody = document.getElementById('market-body');
                     let marketHtml = '';
-                    for (const symbol in status.signals) {
+                    for (const symbol in status.prices) {
                         const displayName = symbolMap[symbol] || symbol;
-                        const signal = status.signals[symbol];
+                        const price = status.prices[symbol] || "0.00";
+                        const signal = status.signals[symbol] || "WAITING";
                         const pos = status.positions[symbol];
                         const signalColor = signal === "LONG" ? "text-green-400" : (signal === "SHORT" ? "text-red-400" : "text-gray-400");
                         
@@ -329,6 +361,7 @@ async def get_dashboard():
                         marketHtml += `
                             <tr class="hover:bg-gray-800/50 transition">
                                 <td class="py-4 font-bold">${displayName}</td>
+                                <td class="py-4 font-mono text-gray-300">$${parseFloat(price).toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}</td>
                                 <td class="py-4 ${signalColor} font-mono">${signal}</td>
                                 <td class="py-4 text-sm">${posStr}</td>
                                 <td class="py-4 text-right">

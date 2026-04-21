@@ -12,9 +12,10 @@ class TradingBot:
         self.auto_trade = False  # Added auto_trade flag
         self.status = {
             "balance": 0.0,
+            "prices": {s: "0.00" for s in symbols}, # Initialized with 0.00
             "last_tick": "Never",
-            "positions": {},
-            "signals": {},
+            "positions": {s: "None" for s in symbols}, # Initialized with None
+            "signals": {s: "WAITING" for s in symbols}, # Initialized with WAITING
             "is_active": False,
             "auto_trade": False,
             "logs": [],
@@ -55,28 +56,38 @@ class TradingBot:
 
     def tick(self):
         # 1. Get account balance
-        assets = self.client.get_account_assets()
+        try:
+            assets = self.client.get_account_assets()
+        except Exception as e:
+            logger.error(f"Failed to fetch assets: {e}")
+            assets = None
+
         if not assets:
-            logger.warning("Could not fetch balance, skipping tick.")
-            self.status["balance"] = 0.0 # Clear if failed
-            return
-        
-        # USDT-M balance. The API returns a list or a dict.
-        # Based on Bitget V2 docs, it's usually a list when calling /accounts
-        if isinstance(assets, list) and len(assets) > 0:
-            # Try to find USDT specifically if multiple coins returned
-            usdt_asset = next((a for a in assets if a.get('marginCoin') == 'USDT'), assets[0])
-            usdt_balance = float(usdt_asset.get('available', 0))
-        elif isinstance(assets, dict):
-            usdt_balance = float(assets.get('available', 0))
+            logger.warning("Could not fetch balance, using last known or zero.")
+            # Don't return, allow prices to update if possible
+            usdt_balance = self.status.get("balance", 0.0)
         else:
-            usdt_balance = 0.0
+            # USDT-M balance. The API returns a list or a dict.
+            if isinstance(assets, list) and len(assets) > 0:
+                usdt_asset = next((a for a in assets if a.get('marginCoin') == 'USDT'), assets[0])
+                usdt_balance = float(usdt_asset.get('available', 0))
+            elif isinstance(assets, dict):
+                usdt_balance = float(assets.get('available', 0))
+            else:
+                usdt_balance = 0.0
 
         self.status["balance"] = usdt_balance
         self.status["last_tick"] = time.strftime("%Y-%m-%d %H:%M:%S")
         logger.info(f"Current Balance: {usdt_balance} USDT")
 
-        # 2. Check each symbol
+        # 2. Update real-time prices for all symbols
+        for symbol in self.symbols:
+            ticker = self.client.get_ticker(symbol)
+            if ticker:
+                # Bitget V2 ticker returns last price in 'lastPr'
+                self.status["prices"][symbol] = ticker.get('lastPr', '0')
+
+        # 3. Check each symbol
         for symbol in self.symbols:
             self.process_symbol(symbol, usdt_balance)
 
