@@ -10,25 +10,24 @@ class BitgetDemoClient:
     A lightweight, production-ready Bitget API client specifically for Demo Trading.
     It manually handles authentication and the required 'paptrading: 1' header.
     """
-    def __init__(self, api_key, api_secret, passphrase):
+    def __init__(self, api_key, api_secret, passphrase, product_type="usdt-futures"):
         self.api_key = api_key
         self.api_secret = api_secret
         self.passphrase = passphrase
+        self.product_type = product_type
         self.base_url = "https://api.bitget.com"
         self.session = requests.Session()
         # Crucial for Demo Trading
         self.session.headers.update({"paptrading": "1"})
 
-    def _generate_signature(self, timestamp, method, request_path, body=""):
-        message = str(timestamp) + method.upper() + request_path + body
-        mac = hmac.new(bytes(self.api_secret, encoding='utf8'), bytes(message, encoding='utf-8'), digestmod=hashlib.sha256)
-        return str(mac.digest().hex()) # Note: Bitget uses base64 for real, but some docs say hex for V2. Let's use the standard V1/V2 auth.
-        # Actually, Bitget V1/V2 usually uses Base64. Let's re-verify.
-        # Correct Bitget V2 signature: base64.b64encode(hmac.new(...).digest()).decode()
-
     def _get_auth_headers(self, method, request_path, body=""):
         import base64
         timestamp = int(time.time() * 1000)
+        
+        # Ensure request_path includes query params if they exist for signature
+        # But requests handles this. Bitget V2 signature: timestamp + method + path + body
+        # request_path should be the raw path including ?params=val
+        
         message = str(timestamp) + method.upper() + request_path + body
         mac = hmac.new(bytes(self.api_secret, encoding='utf8'), bytes(message, encoding='utf-8'), digestmod=hashlib.sha256)
         sign = base64.b64encode(mac.digest()).decode()
@@ -39,13 +38,21 @@ class BitgetDemoClient:
             "ACCESS-PASSPHRASE": self.passphrase,
             "ACCESS-TIMESTAMP": str(timestamp),
             "Content-Type": "application/json",
+            "locale": "en-US",
             "paptrading": "1"
         }
 
     def request(self, method, path, params=None, body=None):
+        # Bitget V2 requires query parameters in the signature for GET requests
+        signed_path = path
+        if params:
+            # Sort params to ensure consistent signature if needed, though Bitget usually wants raw order
+            query_str = "&".join([f"{k}={v}" for k, v in params.items()])
+            signed_path = f"{path}?{query_str}"
+
         url = self.base_url + path
         body_str = json.dumps(body) if body else ""
-        headers = self._get_auth_headers(method, path, body_str)
+        headers = self._get_auth_headers(method, signed_path, body_str)
         
         try:
             if method.upper() == "GET":
@@ -65,22 +72,23 @@ class BitgetDemoClient:
 
     def get_ticker(self, symbol):
         # USDT-M Futures Ticker V2
-        return self.request("GET", "/api/v2/mix/market/ticker", params={"symbol": symbol, "productType": "usdt-futures"})
+        return self.request("GET", "/api/v2/mix/market/ticker", params={"symbol": symbol, "productType": self.product_type})
 
     def get_candles(self, symbol, granularity='1h', limit=100):
         # V2 Market Candles
         params = {
             "symbol": symbol,
-            "productType": "usdt-futures",
+            "productType": self.product_type,
             "granularity": granularity,
             "limit": limit
         }
         return self.request("GET", "/api/v2/mix/market/candles", params=params)
 
-    def get_account_assets(self, margin_coin=None):
+    def get_account_assets(self, product_type=None, margin_coin=None):
         # The API might return a list or a single object depending on if marginCoin is specified
         # V2 Get Account List: /api/v2/mix/account/accounts
-        params = {"productType": "usdt-futures"}
+        p_type = product_type if product_type else self.product_type
+        params = {"productType": p_type}
         if margin_coin:
             params["marginCoin"] = margin_coin
         return self.request("GET", "/api/v2/mix/account/accounts", params=params)
@@ -88,21 +96,20 @@ class BitgetDemoClient:
     def place_order(self, symbol, side, order_type, size, margin_coin="USDT", price=None):
         body = {
             "symbol": symbol,
-            "productType": "usdt-futures",
+            "productType": self.product_type,
             "marginCoin": margin_coin,
             "side": side,  # buy, sell
             "orderType": order_type, # market, limit
             "size": str(size),
-            "tradeSide": "open" if "open" in side else "close" # Simplified for V2 if needed, but V2 uses 'buy'/'sell' and 'posSide'
+            "tradeSide": "open" if "open" in side else "close"
         }
         if price:
             body["price"] = str(price)
         
-        # V2 order placement
         return self.request("POST", "/api/v2/mix/order/place-order", body=body)
 
     def get_open_positions(self, symbol=None):
-        params = {"productType": "usdt-futures"}
+        params = {"productType": self.product_type}
         if symbol:
             params["symbol"] = symbol
         return self.request("GET", "/api/v2/mix/position/all-position", params=params)
@@ -110,7 +117,7 @@ class BitgetDemoClient:
     def set_leverage(self, symbol, leverage, margin_coin="USDT", hold_side="long"):
         body = {
             "symbol": symbol,
-            "productType": "usdt-futures",
+            "productType": self.product_type,
             "marginCoin": margin_coin,
             "leverage": str(leverage),
             "holdSide": hold_side
@@ -118,10 +125,9 @@ class BitgetDemoClient:
         return self.request("POST", "/api/v2/mix/account/set-leverage", body=body)
 
     def set_margin_mode(self, symbol, margin_mode, margin_coin="USDT"):
-        # margin_mode: isolated, crossed
         body = {
             "symbol": symbol,
-            "productType": "usdt-futures",
+            "productType": self.product_type,
             "marginCoin": margin_coin,
             "marginMode": margin_mode
         }

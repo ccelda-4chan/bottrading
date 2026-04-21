@@ -4,12 +4,13 @@ from bitget_client import BitgetDemoClient
 from strategy import Strategy
 
 class TradingBot:
-    def __init__(self, api_key, api_secret, passphrase, symbols):
-        self.client = BitgetDemoClient(api_key, api_secret, passphrase)
+    def __init__(self, api_key, api_secret, passphrase, symbols, product_type="usdt-futures"):
+        self.client = BitgetDemoClient(api_key, api_secret, passphrase, product_type=product_type)
         self.strategy = Strategy()
         self.symbols = symbols
+        self.product_type = product_type
         self.is_running = False
-        self.auto_trade = False  # Added auto_trade flag
+        self.auto_trade = False
         self.status = {
             "balance": 0.0,
             "prices": {s: "0.00" for s in symbols}, # Initialized with 0.00
@@ -56,16 +57,20 @@ class TradingBot:
 
     def tick(self):
         # 1. Get account balance
-        try:
-            # Try fetching specifically for USDT first
-            assets = self.client.get_account_assets(margin_coin="USDT")
-            if not assets:
-                # Fallback: Fetch all assets if USDT-specific fetch returns nothing
-                logger.info("USDT-specific asset fetch returned None, trying all assets...")
-                assets = self.client.get_account_assets()
-        except Exception as e:
-            logger.error(f"Failed to fetch assets: {e}")
-            assets = None
+        usdt_balance = self.status.get("balance", 0.0)
+        
+        # Try primary product type (usually usdt-futures)
+        assets = self.client.get_account_assets(margin_coin="USDT")
+        
+        # Fallback: If no assets found, try 'susdt-futures' which is common for demo
+        if not assets and self.product_type == "usdt-futures":
+            logger.info("No assets found for usdt-futures, trying susdt-futures fallback...")
+            assets = self.client.get_account_assets(product_type="susdt-futures", margin_coin="USDT")
+            
+        # Fallback: Fetch all assets for primary product type if USDT-specific fetch returns nothing
+        if not assets:
+            logger.debug(f"USDT-specific asset fetch failed for {self.product_type}, trying all assets...")
+            assets = self.client.get_account_assets()
 
         usdt_balance = self.status.get("balance", 0.0)
         
@@ -167,10 +172,13 @@ class TradingBot:
         else:
             logger.info(f"Auto-trade disabled. Skipping execution for {symbol}")
 
-    def update_settings(self, api_key, api_secret, passphrase):
+    def update_settings(self, api_key, api_secret, passphrase, product_type=None):
         self.client.api_key = api_key
         self.client.api_secret = api_secret
         self.client.passphrase = passphrase
+        if product_type:
+            self.client.product_type = product_type
+            self.product_type = product_type
         self.add_log("API Settings Updated")
         return True
 

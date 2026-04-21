@@ -22,7 +22,8 @@ def load_config():
         "API_KEY": os.getenv("BITGET_API_KEY", ""),
         "API_SECRET": os.getenv("BITGET_API_SECRET", ""),
         "API_PASSPHRASE": os.getenv("BITGET_API_PASSPHRASE", ""),
-        "SYMBOLS": os.getenv("BITGET_SYMBOLS", "SBTCSUSDT,SETHSUSDT,SXRPSUSDT").split(","),
+        "SYMBOLS": os.getenv("BITGET_SYMBOLS", "BTCUSDT,ETHUSDT,XRPUSDT").split(","),
+        "PRODUCT_TYPE": os.getenv("BITGET_PRODUCT_TYPE", "usdt-futures"),
         "INTERVAL": int(os.getenv("BITGET_INTERVAL", "10")),
         "PORT": int(os.getenv("PORT", "8000"))
     }
@@ -44,7 +45,8 @@ async def lifespan(app: FastAPI):
             api_key=cfg["API_KEY"],
             api_secret=cfg["API_SECRET"],
             passphrase=cfg["API_PASSPHRASE"],
-            symbols=cfg["SYMBOLS"]
+            symbols=cfg["SYMBOLS"],
+            product_type=cfg["PRODUCT_TYPE"]
         )
         
         bot_thread = threading.Thread(target=bot_instance.run, kwargs={"interval": cfg["INTERVAL"]}, daemon=True)
@@ -228,6 +230,10 @@ async def get_dashboard():
                         <div>
                             <label class="block text-xs text-gray-400 mb-1">Passphrase</label>
                             <input type="password" name="passphrase" value="***" class="w-full bg-gray-800 border border-gray-700 rounded p-2 text-sm text-white">
+                        </div>
+                        <div>
+                            <label class="block text-xs text-gray-400 mb-1">Product Type (usdt-futures / susdt-futures)</label>
+                            <input type="text" name="product_type" value="{bot_instance.product_type}" class="w-full bg-gray-800 border border-gray-700 rounded p-2 text-sm text-white">
                         </div>
                         <button type="submit" class="w-full py-2 bg-gray-700 hover:bg-gray-600 rounded text-xs font-bold transition">Update Credentials</button>
                     </form>
@@ -420,9 +426,9 @@ async def manual_order(symbol: str = Form(...), side: str = Form(...), order_typ
     return RedirectResponse(url="/", status_code=303)
 
 @app.post("/update-settings")
-async def update_settings(api_key: str = Form(...), api_secret: str = Form(...), passphrase: str = Form(...)):
+async def update_settings(api_key: str = Form(...), api_secret: str = Form(...), passphrase: str = Form(...), product_type: str = Form("usdt-futures")):
     if bot_instance:
-        bot_instance.update_settings(api_key, api_secret, passphrase)
+        bot_instance.update_settings(api_key, api_secret, passphrase, product_type=product_type)
     return RedirectResponse(url="/", status_code=303)
 
 @app.post("/apply-template")
