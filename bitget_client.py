@@ -78,6 +78,8 @@ class BitgetDemoClient:
         return self.request("GET", "/api/v2/mix/market/candles", params=params)
 
     def get_account_assets(self, margin_coin="USDT"):
+        # The API might return a list or a single object depending on if marginCoin is specified
+        # V2 Get Account List: /api/v2/mix/account/accounts
         return self.request("GET", "/api/v2/mix/account/accounts", params={"productType": "usdt-futures", "marginCoin": margin_coin})
 
     def place_order(self, symbol, side, order_type, size, margin_coin="USDT", price=None):

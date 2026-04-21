@@ -10,6 +10,13 @@ import time
 
 load_dotenv()
 
+# Symbol Mapping for UI
+SYMBOL_MAP = {
+    "SBTCSUSDT": "BTCUSDT",
+    "SETHSUSDT": "ETHUSDT",
+    "SXRPSUSDT": "XRPUSDT"
+}
+
 def load_config():
     config = {
         "API_KEY": os.getenv("BITGET_API_KEY", ""),
@@ -25,8 +32,6 @@ def load_config():
 async def lifespan(app: FastAPI):
     global bot_instance
     try:
-        # On Render, we might want to avoid writing to a file if permissions are tricky,
-        # but loguru handles it generally well. Let's wrap it just in case.
         try:
             logger.add("bot.log", rotation="10 MB")
         except Exception as e:
@@ -42,7 +47,6 @@ async def lifespan(app: FastAPI):
             symbols=cfg["SYMBOLS"]
         )
         
-        # Run bot in a separate thread
         bot_thread = threading.Thread(target=bot_instance.run, kwargs={"interval": cfg["INTERVAL"]}, daemon=True)
         bot_thread.start()
         logger.info("Trading Bot started in background thread.")
@@ -62,7 +66,10 @@ bot_instance = None
 async def get_status():
     if not bot_instance:
         return {"error": "Bot not initialized"}
-    return bot_instance.status
+    # Include symbol map for frontend
+    data = bot_instance.status.copy()
+    data["symbol_map"] = SYMBOL_MAP
+    return data
 
 @app.get("/", response_class=HTMLResponse)
 async def get_dashboard():
@@ -110,16 +117,16 @@ async def get_dashboard():
             <div class="lg:col-span-2 space-y-6">
                 <div class="bg-card rounded-lg p-6 shadow-lg border border-gray-800">
                     <div class="flex justify-between items-center mb-4">
-                        <h2 class="text-xl font-semibold">Market Overview</h2>
-                        <span id="last-tick" class="text-xs text-gray-500 font-mono">Last Tick: {status['last_tick']}</span>
+                        <h2 class="text-xl font-semibold text-gold">Portfolio Tracker</h2>
+                        <span id="last-tick" class="text-xs text-gray-500 font-mono">Last Update: {status['last_tick']}</span>
                     </div>
                     <div class="overflow-x-auto">
                         <table class="w-full text-left">
                             <thead class="text-gray-500 text-xs uppercase border-b border-gray-700">
                                 <tr>
-                                    <th class="pb-3">Symbol</th>
+                                    <th class="pb-3">Asset</th>
                                     <th class="pb-3">Signal</th>
-                                    <th class="pb-3">Position</th>
+                                    <th class="pb-3">Active Position</th>
                                     <th class="pb-3 text-right">Action</th>
                                 </tr>
                             </thead>
@@ -127,6 +134,7 @@ async def get_dashboard():
     """
     
     for symbol in bot_instance.symbols:
+        display_name = SYMBOL_MAP.get(symbol, symbol)
         signal = status['signals'].get(symbol, "WAITING")
         pos = status['positions'].get(symbol, "None")
         signal_color = "text-green-400" if signal == "LONG" else "text-red-400" if signal == "SHORT" else "text-gray-400"
@@ -141,7 +149,7 @@ async def get_dashboard():
         
         html_content += f"""
                                 <tr class="hover:bg-gray-800/50 transition">
-                                    <td class="py-4 font-bold">{symbol}</td>
+                                    <td class="py-4 font-bold">{display_name}</td>
                                     <td class="py-4 {signal_color} font-mono">{signal}</td>
                                     <td class="py-4 text-sm">{pos_str}</td>
                                     <td class="py-4 text-right">
@@ -176,6 +184,25 @@ async def get_dashboard():
 
             <div class="space-y-6">
                 <div class="bg-card rounded-lg p-6 shadow-lg border border-gray-800">
+                    <h2 class="text-xl font-semibold mb-4 text-gold">API Configuration</h2>
+                    <form action="/update-settings" method="post" class="space-y-3">
+                        <div>
+                            <label class="block text-xs text-gray-400 mb-1">API Key</label>
+                            <input type="text" name="api_key" value="***" class="w-full bg-gray-800 border border-gray-700 rounded p-2 text-sm text-white">
+                        </div>
+                        <div>
+                            <label class="block text-xs text-gray-400 mb-1">API Secret</label>
+                            <input type="password" name="api_secret" value="***" class="w-full bg-gray-800 border border-gray-700 rounded p-2 text-sm text-white">
+                        </div>
+                        <div>
+                            <label class="block text-xs text-gray-400 mb-1">Passphrase</label>
+                            <input type="password" name="passphrase" value="***" class="w-full bg-gray-800 border border-gray-700 rounded p-2 text-sm text-white">
+                        </div>
+                        <button type="submit" class="w-full py-2 bg-gray-700 hover:bg-gray-600 rounded text-xs font-bold transition">Update Credentials</button>
+                    </form>
+                </div>
+
+                <div class="bg-card rounded-lg p-6 shadow-lg border border-gray-800">
                     <h2 class="text-xl font-semibold mb-4">Trading Mode</h2>
                     <div class="flex items-center justify-between p-4 bg-gray-800 rounded-lg">
                         <div>
@@ -206,14 +233,15 @@ async def get_dashboard():
                 </div>
 
                 <div class="bg-card rounded-lg p-6 shadow-lg border border-gray-800">
-                    <h2 class="text-xl font-semibold mb-4 text-gold">Manual Trade</h2>
+                    <h2 class="text-xl font-semibold mb-4 text-gold">Manual Order</h2>
                     <form action="/manual-order" method="post" class="space-y-4">
                         <div>
                             <label class="block text-xs text-gray-400 mb-1">Symbol</label>
                             <select name="symbol" class="w-full bg-gray-800 border border-gray-700 rounded p-2 text-sm text-white">
     """
     for sym in bot_instance.symbols:
-        html_content += f"<option value='{sym}'>{sym}</option>"
+        display_name = SYMBOL_MAP.get(sym, sym)
+        html_content += f"<option value='{sym}'>{display_name}</option>"
     
     html_content += """
                             </select>
@@ -246,7 +274,7 @@ async def get_dashboard():
         </main>
         
         <footer class="container mx-auto p-6 text-center text-gray-600 text-xs">
-            Bitget Trading Terminal | Production Ready | {time.strftime("%Y")}
+            Bitget Trading Terminal | Production Ready | 2026
         </footer>
 
         <script>
@@ -256,6 +284,7 @@ async def get_dashboard():
                 try {
                     const res = await fetch('/api/status');
                     const status = await res.json();
+                    const symbolMap = status.symbol_map || {};
                     
                     const balEl = document.getElementById('top-balance');
                     const newBal = parseFloat(status.balance).toFixed(2);
@@ -265,7 +294,7 @@ async def get_dashboard():
                         setTimeout(() => balEl.classList.remove('fade-in'), 500);
                     }
                     
-                    document.getElementById('last-tick').innerText = 'Last Tick: ' + status.last_tick;
+                    document.getElementById('last-tick').innerText = 'Last Update: ' + status.last_tick;
                     
                     const logContainer = document.getElementById('log-container');
                     const logHtml = status.logs.slice().reverse().map(l => `<div>${l}</div>`).join('');
@@ -279,6 +308,42 @@ async def get_dashboard():
                         engineEl.className = 'px-3 py-1 rounded-full text-xs font-bold bg-red-900 text-red-300';
                         engineEl.innerText = 'ENGINE OFFLINE';
                     }
+
+                    // Update Market Table
+                    const marketBody = document.getElementById('market-body');
+                    let marketHtml = '';
+                    for (const symbol in status.signals) {
+                        const displayName = symbolMap[symbol] || symbol;
+                        const signal = status.signals[symbol];
+                        const pos = status.positions[symbol];
+                        const signalColor = signal === "LONG" ? "text-green-400" : (signal === "SHORT" ? "text-red-400" : "text-gray-400");
+                        
+                        let posStr = "No Position";
+                        if (pos && typeof pos === 'object') {
+                            const side = (pos.holdSide || 'N/A').toUpperCase();
+                            const pnl = pos.unrealizedPL || '0';
+                            const pnlColor = parseFloat(pnl) >= 0 ? "text-green-400" : "text-red-400";
+                            posStr = `<span class='font-bold'>${side}</span> ${pos.total} (<span class='${pnlColor}'>${pnl}</span>)`;
+                        }
+
+                        marketHtml += `
+                            <tr class="hover:bg-gray-800/50 transition">
+                                <td class="py-4 font-bold">${displayName}</td>
+                                <td class="py-4 ${signalColor} font-mono">${signal}</td>
+                                <td class="py-4 text-sm">${posStr}</td>
+                                <td class="py-4 text-right">
+                                    <form action="/manual-order" method="post" class="inline">
+                                        <input type="hidden" name="symbol" value="${symbol}">
+                                        <input type="hidden" name="side" value="close">
+                                        <button type="submit" class="text-xs bg-red-900/30 text-red-400 border border-red-900/50 px-3 py-1 rounded hover:bg-red-900/50 transition">
+                                            Close
+                                        </button>
+                                    </form>
+                                </td>
+                            </tr>
+                        `;
+                    }
+                    marketBody.innerHTML = marketHtml;
 
                     if (status.events && status.events.length > 0) {
                         const latest = status.events[status.events.length - 1];
@@ -311,7 +376,6 @@ async def toggle_auto():
 async def manual_order(symbol: str = Form(...), side: str = Form(...), order_type: str = Form("market"), size: float = Form(...)):
     if bot_instance:
         if side == "close":
-            # Find current position to close
             pos = bot_instance.status["positions"].get(symbol)
             if isinstance(pos, dict):
                 close_side = "buy" if pos['holdSide'] == "short" else "sell"
@@ -320,6 +384,12 @@ async def manual_order(symbol: str = Form(...), side: str = Form(...), order_typ
                 bot_instance.add_log(f"No active position to close for {symbol}")
         else:
             bot_instance.manual_order(symbol, side, order_type, size)
+    return RedirectResponse(url="/", status_code=303)
+
+@app.post("/update-settings")
+async def update_settings(api_key: str = Form(...), api_secret: str = Form(...), passphrase: str = Form(...)):
+    if bot_instance:
+        bot_instance.update_settings(api_key, api_secret, passphrase)
     return RedirectResponse(url="/", status_code=303)
 
 @app.post("/apply-template")

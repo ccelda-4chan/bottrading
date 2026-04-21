@@ -58,10 +58,20 @@ class TradingBot:
         assets = self.client.get_account_assets()
         if not assets:
             logger.warning("Could not fetch balance, skipping tick.")
+            self.status["balance"] = 0.0 # Clear if failed
             return
         
-        # USDT-M balance
-        usdt_balance = float(assets[0].get('available', 0))
+        # USDT-M balance. The API returns a list or a dict.
+        # Based on Bitget V2 docs, it's usually a list when calling /accounts
+        if isinstance(assets, list) and len(assets) > 0:
+            # Try to find USDT specifically if multiple coins returned
+            usdt_asset = next((a for a in assets if a.get('marginCoin') == 'USDT'), assets[0])
+            usdt_balance = float(usdt_asset.get('available', 0))
+        elif isinstance(assets, dict):
+            usdt_balance = float(assets.get('available', 0))
+        else:
+            usdt_balance = 0.0
+
         self.status["balance"] = usdt_balance
         self.status["last_tick"] = time.strftime("%Y-%m-%d %H:%M:%S")
         logger.info(f"Current Balance: {usdt_balance} USDT")
@@ -132,6 +142,13 @@ class TradingBot:
                 logger.info(f"Holding {symbol}...")
         else:
             logger.info(f"Auto-trade disabled. Skipping execution for {symbol}")
+
+    def update_settings(self, api_key, api_secret, passphrase):
+        self.client.api_key = api_key
+        self.client.api_secret = api_secret
+        self.client.passphrase = passphrase
+        self.add_log("API Settings Updated")
+        return True
 
     def manual_order(self, symbol, side, order_type, size):
         self.add_log(f"Manual {side.upper()} order for {symbol} (size {size})")
