@@ -5,3 +5,4 @@ numpy
 loguru
 python-dotenv
 gunicorn
+python-multipart
