@@ -3,6 +3,5 @@ uvicorn
 requests
 numpy
 loguru
-python-bitget
 python-dotenv
 gunicorn

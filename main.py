@@ -10,9 +10,9 @@ load_dotenv() # Load from .env if present
 
 def load_config():
     config = {
-        "API_KEY": os.getenv("BITGET_API_KEY", "your_api_key"),
-        "API_SECRET": os.getenv("BITGET_API_SECRET", "your_api_secret"),
-        "API_PASSPHRASE": os.getenv("BITGET_API_PASSPHRASE", "your_passphrase"),
+        "API_KEY": os.getenv("BITGET_API_KEY", ""),
+        "API_SECRET": os.getenv("BITGET_API_SECRET", ""),
+        "API_PASSPHRASE": os.getenv("BITGET_API_PASSPHRASE", ""),
         "SYMBOLS": os.getenv("BITGET_SYMBOLS", "SBTCSUSDT,SETHSUSDT,SXRPSUSDT").split(","),
         "INTERVAL": int(os.getenv("BITGET_INTERVAL", "10")),
         "PORT": int(os.getenv("PORT", "8000"))
@@ -20,11 +20,15 @@ def load_config():
     return config
 
 if __name__ == "__main__":
-    logger.add("bot.log", rotation="10 MB")
     logger.info("Initializing Bitget Trading Bot with Web UI...")
     
     cfg = load_config()
     
+    try:
+        logger.add("bot.log", rotation="10 MB")
+    except Exception as e:
+        logger.warning(f"Could not initialize file logging: {e}")
+
     bot = TradingBot(
         api_key=cfg["API_KEY"],
         api_secret=cfg["API_SECRET"],

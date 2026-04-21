@@ -47,7 +47,11 @@ class TradingBot:
                 logger.error(f"Error during tick: {e}")
                 self.add_log(f"Tick Error: {str(e)}")
             
-            time.sleep(interval)
+            # Use small sleeps to allow quicker shutdown
+            for _ in range(int(interval)):
+                if not self.is_running:
+                    break
+                time.sleep(1)
 
     def tick(self):
         # 1. Get account balance

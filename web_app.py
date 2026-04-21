@@ -1,5 +1,6 @@
 from fastapi import FastAPI, Form, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
+from contextlib import asynccontextmanager
 import os
 import threading
 from loguru import logger
@@ -11,37 +12,51 @@ load_dotenv()
 
 def load_config():
     config = {
-        "API_KEY": os.getenv("BITGET_API_KEY", "your_api_key"),
-        "API_SECRET": os.getenv("BITGET_API_SECRET", "your_api_secret"),
-        "API_PASSPHRASE": os.getenv("BITGET_API_PASSPHRASE", "your_passphrase"),
+        "API_KEY": os.getenv("BITGET_API_KEY", ""),
+        "API_SECRET": os.getenv("BITGET_API_SECRET", ""),
+        "API_PASSPHRASE": os.getenv("BITGET_API_PASSPHRASE", ""),
         "SYMBOLS": os.getenv("BITGET_SYMBOLS", "SBTCSUSDT,SETHSUSDT,SXRPSUSDT").split(","),
         "INTERVAL": int(os.getenv("BITGET_INTERVAL", "10")),
         "PORT": int(os.getenv("PORT", "8000"))
     }
     return config
 
-app = FastAPI()
-bot_instance = None
-
-@app.on_event("startup")
-async def startup_event():
+@asynccontextmanager
+async def lifespan(app: FastAPI):
     global bot_instance
-    logger.add("bot.log", rotation="10 MB")
-    logger.info("Initializing Bitget Trading Bot from Web App...")
+    try:
+        # On Render, we might want to avoid writing to a file if permissions are tricky,
+        # but loguru handles it generally well. Let's wrap it just in case.
+        try:
+            logger.add("bot.log", rotation="10 MB")
+        except Exception as e:
+            logger.warning(f"Could not initialize file logging: {e}")
+
+        logger.info("Initializing Bitget Trading Bot from Web App...")
+        cfg = load_config()
+        
+        bot_instance = TradingBot(
+            api_key=cfg["API_KEY"],
+            api_secret=cfg["API_SECRET"],
+            passphrase=cfg["API_PASSPHRASE"],
+            symbols=cfg["SYMBOLS"]
+        )
+        
+        # Run bot in a separate thread
+        bot_thread = threading.Thread(target=bot_instance.run, kwargs={"interval": cfg["INTERVAL"]}, daemon=True)
+        bot_thread.start()
+        logger.info("Trading Bot started in background thread.")
+    except Exception as e:
+        logger.error(f"Failed to start bot: {e}")
     
-    cfg = load_config()
+    yield
     
-    bot_instance = TradingBot(
-        api_key=cfg["API_KEY"],
-        api_secret=cfg["API_SECRET"],
-        passphrase=cfg["API_PASSPHRASE"],
-        symbols=cfg["SYMBOLS"]
-    )
-    
-    # Run bot in a separate thread
-    bot_thread = threading.Thread(target=bot_instance.run, kwargs={"interval": cfg["INTERVAL"]}, daemon=True)
-    bot_thread.start()
-    logger.info("Trading Bot started in background thread.")
+    if bot_instance:
+        logger.info("Shutting down bot...")
+        bot_instance.is_running = False
+
+app = FastAPI(lifespan=lifespan)
+bot_instance = None
 
 @app.get("/api/status")
 async def get_status():
