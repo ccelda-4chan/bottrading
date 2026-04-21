@@ -104,7 +104,7 @@ async def get_dashboard():
                 <div class="flex items-center space-x-6">
                     <div class="flex flex-col items-end">
                         <span class="text-xs text-gray-400 uppercase tracking-wider">Total Balance</span>
-                        <span id="top-balance" class="text-xl font-mono text-green-400 font-bold">{status['balance']:.2f} USDT</span>
+                        <span id="top-balance" class="text-xl font-mono text-green-400 font-bold">{status['balance']:,.2f} USDT</span>
                     </div>
                     <div id="engine-status" class="px-3 py-1 rounded-full text-xs font-bold { 'bg-green-900 text-green-300' if status['is_active'] else 'bg-red-900 text-red-300' }">
                         { "ENGINE ONLINE" if status['is_active'] else "ENGINE OFFLINE" }
@@ -318,7 +318,7 @@ async def get_dashboard():
                     const symbolMap = status.symbol_map || {};
                     
                     const balEl = document.getElementById('top-balance');
-                    const newBal = parseFloat(status.balance).toFixed(2);
+                    const newBal = parseFloat(status.balance).toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2});
                     if (balEl.innerText !== newBal + ' USDT') {
                         balEl.innerText = newBal + ' USDT';
                         balEl.classList.add('fade-in');

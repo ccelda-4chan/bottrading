@@ -57,28 +57,41 @@ class TradingBot:
     def tick(self):
         # 1. Get account balance
         try:
-            assets = self.client.get_account_assets()
+            # Try fetching specifically for USDT first
+            assets = self.client.get_account_assets(margin_coin="USDT")
+            if not assets:
+                # Fallback: Fetch all assets if USDT-specific fetch returns nothing
+                logger.info("USDT-specific asset fetch returned None, trying all assets...")
+                assets = self.client.get_account_assets()
         except Exception as e:
             logger.error(f"Failed to fetch assets: {e}")
             assets = None
 
-        if not assets:
-            logger.warning("Could not fetch balance, using last known or zero.")
-            # Don't return, allow prices to update if possible
-            usdt_balance = self.status.get("balance", 0.0)
-        else:
+        usdt_balance = self.status.get("balance", 0.0)
+        
+        if assets:
             # USDT-M balance. The API returns a list or a dict.
-            if isinstance(assets, list) and len(assets) > 0:
-                usdt_asset = next((a for a in assets if a.get('marginCoin') == 'USDT'), assets[0])
-                usdt_balance = float(usdt_asset.get('available', 0))
+            if isinstance(assets, list):
+                usdt_asset = next((a for a in assets if a.get('marginCoin') == 'USDT'), None)
+                if usdt_asset:
+                    usdt_balance = float(usdt_asset.get('available', 0))
+                elif len(assets) > 0:
+                    # If USDT not found but list is not empty, log first asset for debugging
+                    logger.debug(f"USDT not found in assets list, first asset: {assets[0]}")
+                    usdt_balance = float(assets[0].get('available', 0))
             elif isinstance(assets, dict):
-                usdt_balance = float(assets.get('available', 0))
-            else:
-                usdt_balance = 0.0
+                # If it's a single dict, it might be the USDT asset or contain it
+                if assets.get('marginCoin') == 'USDT' or 'available' in assets:
+                    usdt_balance = float(assets.get('available', 0))
+                else:
+                    logger.debug(f"Assets dict structure unexpected: {assets.keys()}")
+            
+            logger.info(f"Updated Balance: {usdt_balance} USDT")
+        else:
+            logger.warning("Could not fetch balance from API, using last known value.")
 
         self.status["balance"] = usdt_balance
         self.status["last_tick"] = time.strftime("%Y-%m-%d %H:%M:%S")
-        logger.info(f"Current Balance: {usdt_balance} USDT")
 
         # 2. Update real-time prices for all symbols
         for symbol in self.symbols:
