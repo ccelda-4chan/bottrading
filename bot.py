@@ -334,8 +334,15 @@ class TradingBot:
                 self.add_event("place_order")
                 
                 entry_price = indicators['last_close']
-                tp_dist = indicators['atr'] * 3
-                sl_dist = indicators['atr'] * 2
+                
+                # Risky Mode: Tighter TP/SL
+                if self.strategy.mode == "Risky":
+                    tp_dist = indicators['atr'] * 1.5
+                    sl_dist = indicators['atr'] * 1.0
+                else:
+                    tp_dist = indicators['atr'] * 3
+                    sl_dist = indicators['atr'] * 2
+                
                 tp = entry_price + tp_dist if target_side == "long" else entry_price - tp_dist
                 sl = entry_price - sl_dist if target_side == "long" else entry_price + sl_dist
 
@@ -399,6 +406,7 @@ class TradingBot:
     def apply_template(self, template_name):
         self.add_log(f"Applying template: {template_name}")
         if template_name == "Scalp":
+            self.strategy.mode = "Scalp"
             self.strategy.short_window = 5
             self.strategy.long_window = 13
             self.strategy.risk_per_trade = 0.005
@@ -406,13 +414,23 @@ class TradingBot:
                 self.client.set_leverage(sym, 20)
                 self.client.set_margin_mode(sym, "isolated")
         elif template_name == "Swing":
+            self.strategy.mode = "Swing"
             self.strategy.short_window = 20
             self.strategy.long_window = 50
             self.strategy.risk_per_trade = 0.02
             for sym in self.symbols:
                 self.client.set_leverage(sym, 5)
                 self.client.set_margin_mode(sym, "crossed")
+        elif template_name == "Risky":
+            self.strategy.mode = "Risky"
+            self.strategy.short_window = 3
+            self.strategy.long_window = 7
+            self.strategy.risk_per_trade = 0.03 # Higher risk
+            for sym in self.symbols:
+                self.client.set_leverage(sym, 50) # High leverage
+                self.client.set_margin_mode(sym, "isolated")
         elif template_name == "Default":
+            self.strategy.mode = "Default"
             self.strategy.short_window = 9
             self.strategy.long_window = 21
             self.strategy.risk_per_trade = 0.01

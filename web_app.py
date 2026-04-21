@@ -151,6 +151,15 @@ async def get_dashboard():
                         <select id="tf-select" class="bg-accent text-[10px] text-gray-400 border border-gray-800 rounded px-2 py-1 outline-none" onchange="updateChartTf(this.value)">
                             <option value="1m">1m</option><option value="5m">5m</option><option value="15m">15m</option><option value="1h" selected>1h</option><option value="4h">4h</option><option value="1d">1d</option>
                         </select>
+                        <form action="/apply-template" method="post" class="flex space-x-1">
+                            <select name="template" class="bg-accent text-[10px] text-gray-400 border border-gray-800 rounded px-2 py-1 outline-none">
+                                <option value="Default">Default</option>
+                                <option value="Scalp">Scalp</option>
+                                <option value="Swing">Swing</option>
+                                <option value="Risky" selected>Risky</option>
+                            </select>
+                            <button type="submit" class="px-2 py-1 text-[10px] bg-blue-600 rounded text-white font-bold uppercase transition hover:bg-blue-500">Apply</button>
+                        </form>
                         <div class="flex bg-accent rounded p-0.5 border border-gray-800"><button class="px-3 py-1 text-[10px] bg-blue-600 rounded shadow text-white">Price</button><button class="px-3 py-1 text-[10px] text-gray-500">Equity</button></div>
                     </div>
                 </div>
