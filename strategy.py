@@ -3,8 +3,8 @@ from loguru import logger
 
 class Strategy:
     """
-    Real-world optimized strategy: EMA Cross with ATR-based volatility sizing.
-    Supports multiple modes: Default, Scalp, Swing, and Risky.
+    Elite Pro Trading Strategy: Combines Trend, SMC, Mean Reversion, and Wave analysis.
+    Supports modes: Elite, SMC, Quant, Scalp, Swing, and Risky.
     """
     def __init__(self, short_window=9, long_window=21, atr_window=14, risk_per_trade=0.01):
         self.short_window = short_window
@@ -12,7 +12,7 @@ class Strategy:
         self.atr_window = atr_window
         self.risk_per_trade = risk_per_trade
         # Strategy State
-        self.mode = "Default" # Default, Scalp, Swing, Risky
+        self.mode = "Elite" 
         self.timeframe = "1h"
         self.risk_per_trade = 0.01
 
@@ -27,7 +27,7 @@ class Strategy:
         lows = np.array([float(c[3]) for c in candles])
         volumes = np.array([float(c[5]) for c in candles])
 
-        if len(closes) < max(self.long_window, 50):
+        if len(closes) < 20:
             return None
 
         # Calculate EMAs
@@ -45,29 +45,38 @@ class Strategy:
         # Bollinger Bands
         bb_upper, bb_lower, bb_mid = self._bollinger_bands(closes, 20)
         
+        # MACD
+        macd_line, signal_line, macd_hist = self._macd(closes)
+
+        # ADX
+        adx = self._adx(highs, lows, closes, 14)
+
         # Momentum (ROC)
         momentum = ((closes[-1] - closes[-10]) / closes[-10]) * 100 if len(closes) > 10 else 0
 
-        # Elliott 5th Wave Recognition (Simplified: Look for 3 higher highs/lows)
+        # Elliott 5th Wave Recognition
         wave_pts = self._detect_waves(highs, lows)
 
-        # Trend strength (Ad-hoc)
+        # Trend strength
         trend_pts = 0
         if ema_short[-1] > ema_long[-1]: trend_pts += 25
         if closes[-1] > ema_200[-1]: trend_pts += 15
+        if adx[-1] > 25: trend_pts += 10
         
-        # Golden Line alignment (Close near EMA 200/50)
+        # Golden Line alignment
         golden_line_score = 15 if abs(closes[-1] - ema_200[-1]) / ema_200[-1] < 0.01 else 0
 
-        # Liquidity/Volume score (Ad-hoc)
-        vol_avg = np.mean(volumes[-10:])
+        # Liquidity/Volume score
+        vol_avg = np.mean(volumes[-20:])
         vol_pts = 10 if volumes[-1] > vol_avg else 0
 
+        # SMC Detection
+        smc_score = self._detect_smc(highs, lows, closes)
+
         # Trust Score calculation (0-100)
-        # Trust Score = Alignment of RSI, Stoch, EMA, BB, Waves
-        trust_score = trend_pts + vol_pts + golden_line_score + wave_pts
-        if stoch_k[-1] < 20 or stoch_k[-1] > 80: trust_score += 15
-        if abs(rsi[-1] - 50) > 20: trust_score += 15
+        trust_score = trend_pts + vol_pts + golden_line_score + wave_pts + smc_score
+        if stoch_k[-1] < 20 or stoch_k[-1] > 80: trust_score += 10
+        if abs(rsi[-1] - 50) > 20: trust_score += 10
         
         trust_score = min(100, trust_score)
 
@@ -86,12 +95,54 @@ class Strategy:
             "bb_upper": bb_upper[-1],
             "bb_lower": bb_lower[-1],
             "bb_mid": bb_mid[-1],
+            "macd": macd_line[-1],
+            "macd_signal": signal_line[-1],
+            "macd_hist": macd_hist[-1],
+            "adx": adx[-1],
             "momentum": momentum,
             "vol_score": vol_pts,
             "trend_score": trend_pts,
             "wave_score": wave_pts,
-            "total_score": trust_score # Trust Score
+            "smc_score": smc_score,
+            "total_score": trust_score
         }
+
+    def _macd(self, data, fast=12, slow=26, signal=9):
+        ema_fast = self._ema(data, fast)
+        ema_slow = self._ema(data, slow)
+        macd_line = ema_fast - ema_slow
+        signal_line = self._ema(macd_line, signal)
+        macd_hist = macd_line - signal_line
+        return macd_line, signal_line, macd_hist
+
+    def _adx(self, highs, lows, closes, window):
+        plus_dm = np.zeros_like(highs)
+        minus_dm = np.zeros_like(lows)
+        for i in range(1, len(highs)):
+            up_move = highs[i] - highs[i-1]
+            down_move = lows[i-1] - lows[i]
+            if up_move > down_move and up_move > 0: plus_dm[i] = up_move
+            if down_move > up_move and down_move > 0: minus_dm[i] = down_move
+        
+        tr = np.zeros_like(closes)
+        for i in range(1, len(closes)):
+            tr[i] = max(highs[i]-lows[i], abs(highs[i]-closes[i-1]), abs(lows[i]-closes[i-1]))
+        
+        tr_smooth = self._ema(tr, window)
+        plus_di = 100 * self._ema(plus_dm, window) / tr_smooth
+        minus_di = 100 * self._ema(minus_dm, window) / tr_smooth
+        
+        dx = 100 * abs(plus_di - minus_di) / (plus_di + minus_di + 1e-10)
+        adx = self._ema(dx, window)
+        return adx
+
+    def _detect_smc(self, highs, lows, closes):
+        """Simple SMC detection: Fair Value Gaps (FVG)"""
+        score = 0
+        if len(closes) < 5: return 0
+        if highs[-3] < lows[-1]: score += 15 # Bullish FVG
+        if lows[-3] > highs[-1]: score += 15 # Bearish FVG
+        return score
 
     def _stoch_rsi(self, rsi, window, k_period, d_period):
         rsi_min = np.zeros_like(rsi)
@@ -181,91 +232,85 @@ class Strategy:
         if not indicators:
             return None
 
-        # Base signal from EMA Crossover
         signal = "HOLD"
+        current_price = indicators["last_close"]
+        rsi = indicators["rsi"]
+        stoch_k = indicators["stoch_k"]
+        stoch_d = indicators["stoch_d"]
         
-        # Trend indicators
+        # Trend / Momentum filters
         trend_up = indicators["ema_short"] > indicators["ema_long"]
-        trend_strong_up = indicators["last_close"] > indicators["ema_200"]
-        stoch_rsi_low = indicators["stoch_k"] < 20
-        stoch_rsi_high = indicators["stoch_k"] > 80
+        trend_strong_up = current_price > indicators["ema_200"]
+        adx_strong = indicators.get("adx", 0) > 25
+        macd_bullish = indicators.get("macd_hist", 0) > 0
         
-        # Standard Cross
-        if indicators["ema_short"] > indicators["ema_long"] and indicators["prev_ema_short"] <= indicators["prev_ema_long"]:
-            signal = "LONG"
-        elif indicators["ema_short"] < indicators["ema_long"] and indicators["prev_ema_short"] >= indicators["prev_ema_long"]:
-            signal = "SHORT"
-
-        # Stochastic RSI Reversals (High Frequency)
-        if signal == "HOLD":
-            if stoch_rsi_low and indicators["stoch_k"] > indicators["stoch_d"]:
+        # ELITE STRATEGY SELECTOR
+        if self.mode in ["Elite", "Risky"]:
+            if trend_up and trend_strong_up and macd_bullish and adx_strong:
                 signal = "LONG"
-            elif stoch_rsi_high and indicators["stoch_k"] < indicators["stoch_d"]:
+            elif not trend_up and not trend_strong_up and not macd_bullish and adx_strong:
+                signal = "SHORT"
+            
+            if signal == "HOLD":
+                if (rsi < 30 or stoch_k < 15) and current_price < indicators["bb_lower"]:
+                    signal = "LONG"
+                elif (rsi > 70 or stoch_k > 85) and current_price > indicators["bb_upper"]:
+                    signal = "SHORT"
+            
+            if signal == "HOLD":
+                if indicators.get("smc_score", 0) > 0 and trend_strong_up:
+                    signal = "LONG"
+                if indicators.get("wave_score", 0) > 15:
+                    signal = "LONG" if trend_up else "SHORT"
+
+        elif self.mode == "SMC":
+            if indicators.get("smc_score", 0) > 0:
+                signal = "LONG" if trend_strong_up else "SHORT"
+            elif indicators.get("wave_score", 0) > 10:
+                signal = "LONG" if trend_up else "SHORT"
+
+        elif self.mode == "Quant":
+            score = indicators["total_score"]
+            if score > 80: signal = "LONG"
+            elif score < 30: signal = "SHORT"
+
+        elif self.mode == "Scalp":
+            if stoch_k < 20 and stoch_k > stoch_d: signal = "LONG"
+            elif stoch_k > 80 and stoch_k < stoch_d: signal = "SHORT"
+            
+        else: # Default
+            if indicators["ema_short"] > indicators["ema_long"] and indicators["prev_ema_short"] <= indicators["prev_ema_long"]:
+                signal = "LONG"
+            elif indicators["ema_short"] < indicators["ema_long"] and indicators["prev_ema_short"] >= indicators["prev_ema_long"]:
                 signal = "SHORT"
 
-        # Risky Mode: Aggressive entry points using RSI, BB, and Waves
-        if self.mode == "Risky" or True: # Making it more aggressive by default as requested
-            current_price = indicators["last_close"]
-            rsi = indicators["rsi"]
-            
-            # Oversold + BB Lower touch = Risky Long (Aggressive reversal)
-            if rsi < 35 or current_price < indicators["bb_lower"]:
-                if signal == "HOLD": signal = "LONG"
-            
-            # Overbought + BB Upper touch = Risky Short (Aggressive reversal)
-            if rsi > 65 or current_price > indicators["bb_upper"]:
-                if signal == "HOLD": signal = "SHORT"
-
-            # Trend Continuation (Aggressive)
-            if signal == "HOLD":
-                if trend_up and trend_strong_up and rsi < 65:
-                    signal = "LONG" # Buy the dip
-                elif not trend_up and not trend_strong_up and rsi > 35:
-                    signal = "SHORT" # Sell the rip
-        
-        # Wave 5 potential (Add trust but also trigger)
-        if indicators["wave_score"] >= 20 and signal == "HOLD":
-            signal = "LONG" if trend_up else "SHORT"
-
-        # News override/boost
-        if news_sentiment > 1.5:
-            signal = "LONG" # News-driven scalp
-        if news_sentiment < -1.5:
-            signal = "SHORT" # News-driven dump
+        if news_sentiment > 1.8: signal = "LONG"
+        elif news_sentiment < -1.8: signal = "SHORT"
             
         return signal
 
-    def calculate_position_size(self, balance, entry_price, atr, stop_loss_mult=2.0):
-        """
-        Risk-based position sizing: Risk 1% of equity per trade.
-        Stop loss = 2 * ATR
-        """
-        if atr == 0: return 0
-        
-        risk_amount = balance * self.risk_per_trade
+    def calculate_position_size(self, balance, entry_price, atr, stop_loss_mult=1.5):
+        if atr == 0 or balance <= 0: return 0
+        effective_balance = min(balance, 1000000) 
+        risk_amount = effective_balance * self.risk_per_trade
         stop_loss_dist = atr * stop_loss_mult
-        
         if stop_loss_dist == 0: return 0
-        
-        # position_size = risk_amount / stop_loss_dist
         return risk_amount / stop_loss_dist
 
     def apply_template(self, template_name):
         self.mode = template_name
-        if template_name == "Risky":
-            self.short_window = 3
-            self.long_window = 7
-            self.risk_per_trade = 0.05
+        if template_name == "Elite":
+            self.short_window = 7; self.long_window = 25; self.risk_per_trade = 0.03
+        elif template_name == "Risky":
+            self.short_window = 3; self.long_window = 7; self.risk_per_trade = 0.05
+        elif template_name == "SMC":
+            self.short_window = 10; self.long_window = 50; self.risk_per_trade = 0.02
+        elif template_name == "Quant":
+            self.short_window = 20; self.long_window = 100; self.risk_per_trade = 0.02
         elif template_name == "Scalp":
-            self.short_window = 5
-            self.long_window = 13
-            self.risk_per_trade = 0.02
+            self.short_window = 5; self.long_window = 13; self.risk_per_trade = 0.02
         elif template_name == "Swing":
-            self.short_window = 12
-            self.long_window = 26
-            self.risk_per_trade = 0.01
+            self.short_window = 12; self.long_window = 26; self.risk_per_trade = 0.01
         else:
-            self.short_window = 9
-            self.long_window = 21
-            self.risk_per_trade = 0.01
-        logger.info(f"Strategy Template Applied: {template_name}")
+            self.short_window = 9; self.long_window = 21; self.risk_per_trade = 0.01
+        logger.info(f"Elite Strategy Template Applied: {template_name}")

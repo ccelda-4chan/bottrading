@@ -147,10 +147,12 @@ async def get_dashboard():
                         </select>
                         <form action="/apply-template" method="post" class="flex space-x-1">
                             <select name="template" class="bg-accent text-[10px] text-gray-400 border border-gray-800 rounded px-2 py-1 outline-none">
-                                <option value="Default">Default</option>
+                                <option value="Elite" selected>Elite</option>
+                                <option value="SMC">SMC</option>
+                                <option value="Quant">Quant</option>
                                 <option value="Scalp">Scalp</option>
                                 <option value="Swing">Swing</option>
-                                <option value="Risky" selected>Risky</option>
+                                <option value="Risky">Risky</option>
                             </select>
                             <button type="submit" class="px-2 py-1 text-[10px] bg-blue-600 rounded text-white font-bold uppercase transition hover:bg-blue-500">Apply</button>
                         </form>

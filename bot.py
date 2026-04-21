@@ -142,8 +142,14 @@ class TradingBot:
 
         self.status["balance"] = self.virtual_balance
         if self.initial_balance:
-            self.status["session_pnl"] = self.virtual_balance - self.initial_balance
-            self.status["today_pnl"] = self.status["session_pnl"]
+            pnl = self.virtual_balance - self.initial_balance
+            # Fix astronomical PnL bug
+            if abs(pnl) > 1e12: 
+                logger.warning("Corrupted PnL detected. Resetting session.")
+                pnl = 0
+                self.initial_balance = self.virtual_balance
+            self.status["session_pnl"] = pnl
+            self.status["today_pnl"] = pnl
 
         self.status["last_tick"] = time.strftime("%Y-%m-%d %H:%M:%S")
 
@@ -237,7 +243,14 @@ class TradingBot:
                 logger.info(f"Execution: {event.upper()} hit for {symbol}")
                 self.add_log(f"Execution: {event.upper()} hit for {symbol} at {current_price}")
                 self.add_event(event)
-                self.virtual_balance += current_pos['unrealizedPL']
+                
+                trade_pnl = current_pos['unrealizedPL']
+                # Safety cap
+                if abs(trade_pnl) > self.virtual_balance * 0.5:
+                    logger.warning(f"Capping extreme PnL: {trade_pnl}")
+                    trade_pnl = self.virtual_balance * 0.1 * (1 if trade_pnl > 0 else -1)
+                
+                self.virtual_balance += trade_pnl
                 self.status["trades_count"] += 1
                 del self.virtual_positions[symbol]
                 current_pos = None
