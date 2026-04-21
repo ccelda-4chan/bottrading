@@ -320,16 +320,45 @@ async def get_dashboard():
 
                     document.getElementById('signal-count').innerText = status.trade_signals.length;
                     const signalList = document.getElementById('trade-signals-list');
-                    signalList.innerHTML = status.trade_signals.map(s => `
+                    signalList.innerHTML = status.trade_signals.map(s => {
+                        const ind = s.indicators || {};
+                        const trend_pts = ind.trend_score || 0;
+                        const vol_pts = ind.vol_score || 0;
+                        const mom_pts = Math.abs(ind.momentum || 0).toFixed(1);
+                        const quality = ind.total_score || 50;
+                        
+                        return `
                         <div class="bg-card border border-gray-800 rounded p-3 flex justify-between items-center relative overflow-hidden group">
                             <div class="absolute left-0 top-0 bottom-0 w-1 ${s.type === 'LONG' ? 'bg-green-bitget' : 'bg-red-bitget'}"></div>
-                            <div class="space-y-1"><div class="flex items-center space-x-2"><span class="bg-accent text-[9px] px-1.5 py-0.5 rounded font-bold text-white uppercase">${s.type === 'LONG' ? 'Scalp' : 'Trend'}</span><span class="text-xs font-bold text-white">${symbolMap[s.symbol] || s.symbol} ${s.type}</span></div><div class="text-[9px] text-gray-500 font-mono">trend <span class="text-gray-300">25pt</span> | liquidity <span class="text-gray-300">10pt</span></div></div>
-                            <div class="text-right flex items-center space-x-6"><div class="text-center"><div class="text-xs font-bold text-white">${s.score}</div><div class="text-[9px] text-blue-500 font-bold">${s.r_r}</div></div>
-                                <div class="flex space-x-2"><form action="/approve-signal" method="post"><input type="hidden" name="symbol" value="${s.symbol}"><input type="hidden" name="signal_type" value="${s.type}"><button class="bg-green-bitget/10 text-green-bitget border border-green-bitget/30 px-3 py-1 rounded text-[10px] font-bold hover:bg-green-bitget/20 transition">Approve</button></form>
-                                <form action="/reject-signal" method="post"><input type="hidden" name="symbol" value="${s.symbol}"><input type="hidden" name="signal_type" value="${s.type}"><button class="bg-red-bitget/10 text-red-bitget border border-red-bitget/30 px-3 py-1 rounded text-[10px] font-bold hover:bg-red-bitget/20 transition">Reject</button></form></div>
+                            <div class="space-y-1">
+                                <div class="flex items-center space-x-2">
+                                    <span class="bg-accent text-[9px] px-1.5 py-0.5 rounded font-bold text-white uppercase">${s.type === 'LONG' ? 'SCALP' : 'SWING'}</span>
+                                    <span class="text-xs font-bold text-white">${symbolMap[s.symbol] || s.symbol} ${s.type}</span>
+                                </div>
+                                <div class="text-[9px] text-gray-500 font-mono">
+                                    trend <span class="text-gray-300">${trend_pts}pt</span> | 
+                                    liquidity <span class="text-gray-300">${vol_pts}pt</span> | 
+                                    momentum <span class="text-gray-300">${mom_pts}pt</span> |
+                                    quality <span class="text-gray-300">${quality}pt</span>
+                                </div>
+                                <div class="text-[9px] text-gray-600 mt-1">
+                                    <span class="text-red-500">Entry: ${parseFloat(ind.last_close).toFixed(2)}</span> 
+                                    <span class="text-gray-500 ml-2">SL: ${parseFloat(s.type === 'LONG' ? ind.last_close - (ind.atr * 2) : ind.last_close + (ind.atr * 2)).toFixed(2)}</span>
+                                    <span class="text-green-500 ml-2">TP1: ${parseFloat(s.type === 'LONG' ? ind.last_close + (ind.atr * 3) : ind.last_close - (ind.atr * 3)).toFixed(2)}</span>
+                                </div>
+                            </div>
+                            <div class="text-right flex items-center space-x-6">
+                                <div class="text-center">
+                                    <div class="text-xs font-bold text-white">${s.score}</div>
+                                    <div class="text-[9px] text-blue-500 font-bold">${s.r_r}</div>
+                                </div>
+                                <div class="flex space-x-2">
+                                    <form action="/approve-signal" method="post"><input type="hidden" name="symbol" value="${s.symbol}"><input type="hidden" name="signal_type" value="${s.type}"><button class="bg-green-bitget text-dark font-bold px-3 py-1 rounded text-[10px] hover:bg-green-400 transition">Approve</button></form>
+                                    <form action="/reject-signal" method="post"><input type="hidden" name="symbol" value="${s.symbol}"><input type="hidden" name="signal_type" value="${s.type}"><button class="bg-accent text-gray-400 border border-gray-700 px-3 py-1 rounded text-[10px] hover:text-white transition">Reject</button></form>
+                                </div>
                             </div>
                         </div>
-                    `).join('');
+                    `}).join('');
 
                     const posBody = document.getElementById('positions-body');
                     let posHtml = '';
