@@ -13,6 +13,13 @@ class TradingBot:
         self.auto_trade = False
         self.status = {
             "balance": 0.0,
+            "today_pnl": 0.0,
+            "unrealized_pnl": 0.0,
+            "trades_count": 0,
+            "win_rate": 0,
+            "drawdown": 0.0,
+            "open_count": 0,
+            "session_pnl": 0.0,
             "prices": {s: "0.00" for s in symbols}, # Initialized with 0.00
             "last_tick": "Never",
             "positions": {s: "None" for s in symbols}, # Initialized with None
@@ -20,8 +27,11 @@ class TradingBot:
             "is_active": False,
             "auto_trade": False,
             "logs": [],
-            "events": [] # To store sound events
+            "events": [], # To store sound events
+            "asset_signals": {s: 50 for s in symbols}, # Mock score for bar chart
+            "trade_signals": [] # List of pending/recent signals for approval
         }
+        self.initial_balance = None
 
     def add_event(self, event_type):
         # event_type can be 'place_order', 'tp', 'sl'
@@ -96,6 +106,13 @@ class TradingBot:
             logger.warning("Could not fetch balance from API, using last known value.")
 
         self.status["balance"] = usdt_balance
+        if self.initial_balance is None and usdt_balance > 0:
+            self.initial_balance = usdt_balance
+        
+        if self.initial_balance:
+            self.status["session_pnl"] = usdt_balance - self.initial_balance
+            self.status["today_pnl"] = self.status["session_pnl"] # Simplification
+
         self.status["last_tick"] = time.strftime("%Y-%m-%d %H:%M:%S")
 
         # 2. Update real-time prices for all symbols
@@ -106,8 +123,17 @@ class TradingBot:
                 self.status["prices"][symbol] = ticker.get('lastPr', '0')
 
         # 3. Check each symbol
+        total_unrealized = 0.0
+        open_count = 0
         for symbol in self.symbols:
             self.process_symbol(symbol, usdt_balance)
+            pos = self.status["positions"].get(symbol)
+            if isinstance(pos, dict):
+                total_unrealized += float(pos.get('unrealizedPL', 0))
+                open_count += 1
+        
+        self.status["unrealized_pnl"] = total_unrealized
+        self.status["open_count"] = open_count
 
     def process_symbol(self, symbol, balance):
         logger.info(f"Processing {symbol}...")
@@ -126,6 +152,27 @@ class TradingBot:
         signal = self.strategy.generate_signal(indicators)
         self.status["signals"][symbol] = signal
         logger.info(f"Signal for {symbol}: {signal}")
+        
+        # Update asset signal score (mock logic for visualization)
+        score = 50
+        if signal == "LONG": score = 80
+        elif signal == "SHORT": score = 20
+        self.status["asset_signals"][symbol] = score
+
+        # Add to trade signals list if it's a new actionable signal
+        if signal in ["LONG", "SHORT"]:
+            exists = any(ts['symbol'] == symbol and ts['type'] == signal for ts in self.status["trade_signals"])
+            if not exists:
+                self.status["trade_signals"].insert(0, {
+                    "symbol": symbol,
+                    "type": signal,
+                    "status": "PENDING",
+                    "score": f"{score}/100",
+                    "r_r": "2.0R",
+                    "ts": time.time()
+                })
+                if len(self.status["trade_signals"]) > 5:
+                    self.status["trade_signals"].pop()
 
         # Check existing positions
         positions = self.client.get_open_positions(symbol)
